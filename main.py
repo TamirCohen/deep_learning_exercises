@@ -1,0 +1,92 @@
+# create pytorch script
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torchvision import datasets, transforms
+from torch.utils.data import DataLoader, Subset
+
+DATASET_PATH = './data_set'
+# Load fashion MNIST dataset 
+data_set = datasets.FashionMNIST(DATASET_PATH, train=True, download=True,
+                   transform=transforms.Compose([
+                       transforms.ToTensor(),
+                       transforms.Normalize((0.1307,), (0.3081,))
+                   ]))
+
+#TODO remove the partial data set
+partial_data_set = Subset(data_set, range(3000)) 
+
+training_loader = torch.utils.data.DataLoader(
+    partial_data_set,
+    batch_size=10, shuffle=True)
+
+# Create lenet5 model for fashion MNIST dataset
+class LeNet5(nn.Module):
+    LAST_CONV_OUT_CHANNEL = 16
+    def __init__(self):
+        super(LeNet5, self).__init__()
+        # Added 2 padding to make the output size same as input size
+        self.conv1 = nn.Conv2d(in_channels=1, out_channels=6, kernel_size=5, padding=2)
+        self.pool1 = nn.AvgPool2d(kernel_size=2, stride=2)
+        self.conv2 = nn.Conv2d(in_channels=6, out_channels=self.LAST_CONV_OUT_CHANNEL, kernel_size=5)
+        self.pool2 = nn.AvgPool2d(kernel_size=2, stride=2)
+        self.fc1 = nn.Linear(self.LAST_CONV_OUT_CHANNEL * 5 * 5, 120)
+        self.fc2 = nn.Linear(120, 84)
+        self.fc3 = nn.Linear(84, 10)
+
+    def forward(self, x):
+        x = nn.functional.sigmoid(self.conv1(x))
+        x = self.pool1(x)
+        x = nn.functional.sigmoid(self.conv2(x))
+        x = self.pool2(x)
+        x = x.view(-1, 16 * 5 * 5)
+        x = nn.functional.sigmoid(self.fc1(x))
+        x = nn.functional.sigmoid(self.fc2(x))
+        x = self.fc3(x)
+        return x
+
+# define lenet5 loss function and optimizer
+model = LeNet5()
+loss_fn = nn.CrossEntropyLoss()
+optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.5)
+
+
+def train_one_epoch(epoch_index):
+    running_loss = 0.
+    last_loss = 0.
+
+    # Here, we use enumerate(training_loader) instead of
+    # iter(training_loader) so that we can track the batch
+    # index and do some intra-epoch reporting
+    for i, data in enumerate(training_loader):
+        # Every data instance is an input + label pair
+        inputs, labels = data
+
+        # Zero your gradients for every batch!
+        optimizer.zero_grad()
+
+        # Make predictions for this batch
+        outputs = model(inputs)
+
+        # Compute the loss and its gradients
+        loss = loss_fn(outputs, labels)
+        loss.backward()
+
+        # Adjust learning weights
+        optimizer.step()
+
+        # Gather data and report
+        running_loss += loss.item()
+        if i % 100 == 99:
+            last_loss = running_loss / 1000 # loss per batch
+            print(f'  batch {i + 1} loss: {last_loss}')
+            running_loss = 0.
+
+    return last_loss
+
+if __name__ == '__main__':
+    losses = []
+    for epoch in range(1, 10):
+        loss = train_one_epoch(epoch)
+        losses.append(loss)
+        print(f"Epoch {epoch} loss: {loss}")
