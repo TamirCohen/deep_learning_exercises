@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, Subset
+from torch.utils.tensorboard import SummaryWriter
 
 DATASET_PATH = './data_set'
 # Load fashion MNIST dataset 
@@ -49,9 +50,10 @@ class LeNet5(nn.Module):
 model = LeNet5()
 loss_fn = nn.CrossEntropyLoss()
 optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.5)
+writer = SummaryWriter()
 
 
-def train_one_epoch(epoch_index):
+def train_one_epoch(epoch_index, tb_writer):
     running_loss = 0.
     last_loss = 0.
 
@@ -80,6 +82,8 @@ def train_one_epoch(epoch_index):
         if i % 100 == 99:
             last_loss = running_loss / 1000 # loss per batch
             print(f'  batch {i + 1} loss: {last_loss}')
+            tb_x = epoch_index * len(training_loader) + i + 1
+            tb_writer.add_scalar('Loss/train', last_loss, tb_x)
             running_loss = 0.
 
     return last_loss
@@ -87,6 +91,6 @@ def train_one_epoch(epoch_index):
 if __name__ == '__main__':
     losses = []
     for epoch in range(1, 10):
-        loss = train_one_epoch(epoch)
+        loss = train_one_epoch(epoch, writer)
         losses.append(loss)
         print(f"Epoch {epoch} loss: {loss}")
