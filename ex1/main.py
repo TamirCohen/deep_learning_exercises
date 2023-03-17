@@ -16,7 +16,7 @@ training_set = datasets.FashionMNIST(DATASET_PATH, train=True, download=True, tr
 validation_set = datasets.FashionMNIST(DATASET_PATH, train=False, download=True, transform=transform)
 
 #TODO remove the partial data set
-partial_training_set = Subset(training_set, range(3000))
+partial_training_set = Subset(training_set, range(10000))
 partial_validation_set = Subset(validation_set, range(1000))
 
 
@@ -57,7 +57,7 @@ class LeNet5(nn.Module):
 # define lenet5 loss function and optimizer
 model = LeNet5()
 loss_fn = nn.CrossEntropyLoss()
-optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.99)
 writer = SummaryWriter()
 
 
@@ -98,7 +98,7 @@ def train_one_epoch(epoch_index, tb_writer):
 
 if __name__ == '__main__':
     losses = []
-    for epoch in range(1, 10):
+    for epoch in range(1, 20):
         loss = train_one_epoch(epoch, writer)
         losses.append(loss)
         print(f"Epoch {epoch} loss: {loss}")
