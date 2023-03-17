@@ -5,21 +5,29 @@ import torch.nn.functional as F
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, Subset
 from torch.utils.tensorboard import SummaryWriter
-
 DATASET_PATH = './data_set'
+
+transform = transforms.Compose(
+    [transforms.ToTensor(),
+    transforms.Normalize((0.5,), (0.5,))])
+
 # Load fashion MNIST dataset 
-data_set = datasets.FashionMNIST(DATASET_PATH, train=True, download=True,
-                   transform=transforms.Compose([
-                       transforms.ToTensor(),
-                       transforms.Normalize((0.1307,), (0.3081,))
-                   ]))
+training_set = datasets.FashionMNIST(DATASET_PATH, train=True, download=True, transform=transform)
+validation_set = datasets.FashionMNIST(DATASET_PATH, train=False, download=True, transform=transform)
 
 #TODO remove the partial data set
-partial_data_set = Subset(data_set, range(3000)) 
+partial_training_set = Subset(training_set, range(3000))
+partial_validation_set = Subset(validation_set, range(1000))
+
 
 training_loader = torch.utils.data.DataLoader(
-    partial_data_set,
+    partial_training_set,
     batch_size=10, shuffle=True)
+
+validation_loader = torch.utils.data.DataLoader(
+    partial_validation_set,
+    batch_size=10, shuffle=False)
+
 
 # Create lenet5 model for fashion MNIST dataset
 class LeNet5(nn.Module):
@@ -49,7 +57,7 @@ class LeNet5(nn.Module):
 # define lenet5 loss function and optimizer
 model = LeNet5()
 loss_fn = nn.CrossEntropyLoss()
-optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.5)
+optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
 writer = SummaryWriter()
 
 
@@ -94,3 +102,5 @@ if __name__ == '__main__':
         loss = train_one_epoch(epoch, writer)
         losses.append(loss)
         print(f"Epoch {epoch} loss: {loss}")
+    writer.flush()
+    writer.close()
