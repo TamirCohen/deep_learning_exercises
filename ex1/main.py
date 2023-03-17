@@ -2,11 +2,12 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch import sigmoid
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, Subset
 from torch.utils.tensorboard import SummaryWriter
 DATASET_PATH = './data_set'
-
+BATCH_SIZE = 64
 transform = transforms.Compose(
     [transforms.ToTensor(),
     transforms.Normalize((0.5,), (0.5,))])
@@ -15,18 +16,14 @@ transform = transforms.Compose(
 training_set = datasets.FashionMNIST(DATASET_PATH, train=True, download=True, transform=transform)
 validation_set = datasets.FashionMNIST(DATASET_PATH, train=False, download=True, transform=transform)
 
-#TODO remove the partial data set
-partial_training_set = Subset(training_set, range(10000))
-partial_validation_set = Subset(validation_set, range(1000))
-
 
 training_loader = torch.utils.data.DataLoader(
-    partial_training_set,
-    batch_size=10, shuffle=True)
+    training_set,
+    batch_size=BATCH_SIZE, shuffle=True)
 
 validation_loader = torch.utils.data.DataLoader(
-    partial_validation_set,
-    batch_size=10, shuffle=False)
+    validation_set,
+    batch_size=BATCH_SIZE, shuffle=False)
 
 
 # Create lenet5 model for fashion MNIST dataset
@@ -44,13 +41,13 @@ class LeNet5(nn.Module):
         self.fc3 = nn.Linear(84, 10)
 
     def forward(self, x):
-        x = nn.functional.sigmoid(self.conv1(x))
+        x = sigmoid(self.conv1(x))
         x = self.pool1(x)
-        x = nn.functional.sigmoid(self.conv2(x))
+        x = sigmoid(self.conv2(x))
         x = self.pool2(x)
         x = x.view(-1, 16 * 5 * 5)
-        x = nn.functional.sigmoid(self.fc1(x))
-        x = nn.functional.sigmoid(self.fc2(x))
+        x = sigmoid(self.fc1(x))
+        x = sigmoid(self.fc2(x))
         x = self.fc3(x)
         return x
 
