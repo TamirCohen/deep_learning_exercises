@@ -2,12 +2,15 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import datetime
 from torch import sigmoid
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, Subset
 from torch.utils.tensorboard import SummaryWriter
 DATASET_PATH = './data_set'
 BATCH_SIZE = 64
+EPOCH_NUMBER = 20
+
 transform = transforms.Compose(
     [transforms.ToTensor(),
     transforms.Normalize((0.5,), (0.5,))])
@@ -16,6 +19,14 @@ transform = transforms.Compose(
 training_set = datasets.FashionMNIST(DATASET_PATH, train=True, download=True, transform=transform)
 validation_set = datasets.FashionMNIST(DATASET_PATH, train=False, download=True, transform=transform)
 
+# accelerate training with GPU
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("Using {} device".format(device))
+
+# training_set.data.to(device)
+# training_set.targets.to(device)
+# validation_set.data.to(device)
+# validation_set.targets.to(device)
 
 training_loader = torch.utils.data.DataLoader(
     training_set,
@@ -52,11 +63,12 @@ class LeNet5(nn.Module):
         return x
 
 # define lenet5 loss function and optimizer
-model = LeNet5()
+model = LeNet5().to(device)
+
 loss_fn = nn.CrossEntropyLoss()
 optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.99)
-writer = SummaryWriter()
-
+timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+writer = SummaryWriter('runs/fashion_trainer_{}'.format(timestamp))
 
 def train_one_epoch(epoch_index, tb_writer):
     running_loss = 0.
@@ -68,6 +80,8 @@ def train_one_epoch(epoch_index, tb_writer):
     for i, data in enumerate(training_loader):
         # Every data instance is an input + label pair
         inputs, labels = data
+        inputs, labels = inputs.to(device), labels.to(device)
+
 
         # Zero your gradients for every batch!
         optimizer.zero_grad()
@@ -94,10 +108,32 @@ def train_one_epoch(epoch_index, tb_writer):
     return last_loss
 
 if __name__ == '__main__':
-    losses = []
-    for epoch in range(1, 20):
-        loss = train_one_epoch(epoch, writer)
-        losses.append(loss)
-        print(f"Epoch {epoch} loss: {loss}")
-    writer.flush()
+    best_vloss = 1_000_000.
+    for epoch in range(1, EPOCH_NUMBER):
+        model.train(True)
+        train_loss = train_one_epoch(epoch, writer)
+        
+        running_vloss = 0.0
+        for i, vdata in enumerate(validation_loader):
+            validation_inputs, vaildation_labels = vdata
+            validation_inputs, vaildation_labels = validation_inputs.to(device), vaildation_labels.to(device)
+
+            voutputs = model(validation_inputs)
+            vloss = loss_fn(voutputs, vaildation_labels)
+            running_vloss += vloss
+
+        validation_loss = running_vloss / (i + 1)
+        print(f'Epoch {epoch} LOSS train {train_loss} valid {validation_loss}')
+        # Log the running loss averaged per batch
+        # for both training and validation
+        writer.add_scalars('Training vs. Validation Loss',
+                    { 'Training' : train_loss, 'Validation' : validation_loss },
+                    epoch + 1)
+        writer.flush()
+        if validation_loss < best_vloss:
+            best_vloss = validation_loss
+            model_path = 'model_{}_{}'.format(timestamp, epoch)
+            torch.save(model.state_dict(), model_path)
+
+
     writer.close()
