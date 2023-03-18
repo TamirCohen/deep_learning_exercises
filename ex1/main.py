@@ -2,17 +2,21 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import datetime
-from torch import sigmoid
+from torch import tanh
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, Subset
 from torch.utils.tensorboard import SummaryWriter
 
 DATASET_PATH = './data_set'
-BATCH_SIZE = 64
-EPOCH_NUMBER = 20
-LERANING_RATE = 0.01
-MOMENTUM = 0.99
+EPOCH_NUMBER = 10
+BATCH_SIZE = 128
+LERANING_RATE = 0.07
+MOMENTUM = 0.9
+# LERANING_RATE = 0.05, BATCH_SIZE = 64 was good, but converges slow
+# LERANING_RATE = 0.01, BATCH_SIZE = 64 converges fast, but oscillates a lot
+# LERANING_RATE = 0.07, MOMENTUM = 0.9, BATCH_SIZE = 128, EPOCH_NUMBER = 10. the increased batch size reduced the oscilations. It converges to 0.9?
+
+#TODO consider adding early stopping
 
 transform = transforms.Compose(
     [transforms.ToTensor(),
@@ -55,13 +59,13 @@ class LeNet5(nn.Module):
         self.fc3 = nn.Linear(84, 10)
 
     def forward(self, x):
-        x = sigmoid(self.conv1(x))
+        x = tanh(self.conv1(x))
         x = self.pool1(x)
-        x = sigmoid(self.conv2(x))
+        x = tanh(self.conv2(x))
         x = self.pool2(x)
         x = x.view(-1, 16 * 5 * 5)
-        x = sigmoid(self.fc1(x))
-        x = sigmoid(self.fc2(x))
+        x = tanh(self.fc1(x))
+        x = tanh(self.fc2(x))
         x = self.fc3(x)
         return x
 
@@ -70,8 +74,7 @@ model = LeNet5().to(device)
 
 loss_fn = nn.CrossEntropyLoss()
 optimizer = torch.optim.SGD(model.parameters(), lr=LERANING_RATE, momentum=MOMENTUM)
-timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-writer = SummaryWriter('runs/fashion_trainer_{}'.format(timestamp))
+writer = SummaryWriter('runs/fashion_trainer_Parameters_{}_{}_{}'.format(LERANING_RATE, MOMENTUM, BATCH_SIZE))
 
 LOSS_LOG_INTERVAL = 100
 
@@ -113,8 +116,6 @@ def train_one_epoch(epoch_index, tb_writer):
     return training_loss
 
 def train_model():
-    best_vloss = 1_000_000.
-
     for epoch in range(1, EPOCH_NUMBER):
         model.train(True)
         train_loss = train_one_epoch(epoch, writer)
@@ -129,7 +130,7 @@ def train_model():
             running_vloss += vloss
 
         test_loss = running_vloss / (i + 1)
-        print(f'Epoch {epoch} LOSS train {train_loss} valid {test_loss}')
+        print(f'Epoch {epoch} LOSS train {train_loss} test {test_loss}')
         # Log the running loss averaged per batch
         # for both training and test
         writer.add_scalars('Training vs. test Loss',
