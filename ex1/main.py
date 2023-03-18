@@ -7,9 +7,12 @@ from torch import sigmoid
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, Subset
 from torch.utils.tensorboard import SummaryWriter
+
 DATASET_PATH = './data_set'
 BATCH_SIZE = 64
 EPOCH_NUMBER = 20
+LERANING_RATE = 0.01
+MOMENTUM = 0.99
 
 transform = transforms.Compose(
     [transforms.ToTensor(),
@@ -17,7 +20,7 @@ transform = transforms.Compose(
 
 # Load fashion MNIST dataset 
 training_set = datasets.FashionMNIST(DATASET_PATH, train=True, download=True, transform=transform)
-validation_set = datasets.FashionMNIST(DATASET_PATH, train=False, download=True, transform=transform)
+test_set = datasets.FashionMNIST(DATASET_PATH, train=False, download=True, transform=transform)
 
 # accelerate training with GPU
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -25,15 +28,15 @@ print("Using {} device".format(device))
 
 # training_set.data.to(device)
 # training_set.targets.to(device)
-# validation_set.data.to(device)
-# validation_set.targets.to(device)
+# test_set.data.to(device)
+# test_set.targets.to(device)
 
 training_loader = torch.utils.data.DataLoader(
     training_set,
     batch_size=BATCH_SIZE, shuffle=True)
 
-validation_loader = torch.utils.data.DataLoader(
-    validation_set,
+test_loader = torch.utils.data.DataLoader(
+    test_set,
     batch_size=BATCH_SIZE, shuffle=False)
 
 
@@ -66,13 +69,15 @@ class LeNet5(nn.Module):
 model = LeNet5().to(device)
 
 loss_fn = nn.CrossEntropyLoss()
-optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.99)
+optimizer = torch.optim.SGD(model.parameters(), lr=LERANING_RATE, momentum=MOMENTUM)
 timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
 writer = SummaryWriter('runs/fashion_trainer_{}'.format(timestamp))
 
+LOSS_LOG_INTERVAL = 100
+
 def train_one_epoch(epoch_index, tb_writer):
     running_loss = 0.
-    last_loss = 0.
+    training_loss = 0.
 
     # Here, we use enumerate(training_loader) instead of
     # iter(training_loader) so that we can track the batch
@@ -98,42 +103,69 @@ def train_one_epoch(epoch_index, tb_writer):
 
         # Gather data and report
         running_loss += loss.item()
-        if i % 100 == 99:
-            last_loss = running_loss / 1000 # loss per batch
-            print(f'  batch {i + 1} loss: {last_loss}')
+        if i % LOSS_LOG_INTERVAL == LOSS_LOG_INTERVAL - 1:
+            training_loss = running_loss / LOSS_LOG_INTERVAL # LOSS_LOG_INTERVAL  per batch
+            print(f'  batch {i + 1} loss: {training_loss}')
             tb_x = epoch_index * len(training_loader) + i + 1
-            tb_writer.add_scalar('Loss/train', last_loss, tb_x)
+            tb_writer.add_scalar('Loss/train', training_loss, tb_x)
             running_loss = 0.
 
-    return last_loss
+    return training_loss
 
-if __name__ == '__main__':
+def train_model():
     best_vloss = 1_000_000.
+
     for epoch in range(1, EPOCH_NUMBER):
         model.train(True)
         train_loss = train_one_epoch(epoch, writer)
         
         running_vloss = 0.0
-        for i, vdata in enumerate(validation_loader):
-            validation_inputs, vaildation_labels = vdata
-            validation_inputs, vaildation_labels = validation_inputs.to(device), vaildation_labels.to(device)
+        for i, data in enumerate(test_loader):
+            test_inputs, vaildation_labels = data
+            test_inputs, vaildation_labels = test_inputs.to(device), vaildation_labels.to(device)
 
-            voutputs = model(validation_inputs)
+            voutputs = model(test_inputs)
             vloss = loss_fn(voutputs, vaildation_labels)
             running_vloss += vloss
 
-        validation_loss = running_vloss / (i + 1)
-        print(f'Epoch {epoch} LOSS train {train_loss} valid {validation_loss}')
+        test_loss = running_vloss / (i + 1)
+        print(f'Epoch {epoch} LOSS train {train_loss} valid {test_loss}')
         # Log the running loss averaged per batch
-        # for both training and validation
-        writer.add_scalars('Training vs. Validation Loss',
-                    { 'Training' : train_loss, 'Validation' : validation_loss },
+        # for both training and test
+        writer.add_scalars('Training vs. test Loss',
+                    { 'Training' : train_loss, 'test' : test_loss },
                     epoch + 1)
+        test_accuracy = calculate_accuracy(model, test_loader)
+        writer.add_scalar('Accuracy/test', test_accuracy, epoch + 1)
+        print(f"test accuracy: {test_accuracy}")
         writer.flush()
-        if validation_loss < best_vloss:
-            best_vloss = validation_loss
-            model_path = 'model_{}_{}'.format(timestamp, epoch)
-            torch.save(model.state_dict(), model_path)
-
-
     writer.close()
+
+def calculate_accuracy(model, data_loader):
+    # Set model to evaluation mode
+    model.eval()
+    
+    # Initialize counters
+    num_correct = 0
+    num_total = 0
+    
+    # Iterate over the test dataset
+    with torch.no_grad():
+        for data, labels in data_loader:
+            # Forward pass
+            data, labels = data.to(device), labels.to(device)
+            output = model(data)
+            _, predictions = torch.max(output, 1)
+            
+            # Update counters
+            num_correct += (predictions == labels).sum().item()
+            num_total += labels.size(0)
+    
+    # Calculate accuracy
+    accuracy = num_correct / num_total
+    return accuracy
+
+
+if __name__ == '__main__':
+    train_model()
+    calculate_accuracy(model, test_loader)
