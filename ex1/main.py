@@ -101,7 +101,7 @@ class ModelTrainer():
             test_accuracy = self.calculate_accuracy(self.model, self.test_loader)
             training_accuracy = self.calculate_accuracy(self.model, self.training_loader)
 
-            self.writer.add_scalar('Training vs. test Accuracy', { 'Training' : training_accuracy, 'test' : test_accuracy }, epoch + 1)
+            self.writer.add_scalars('Training vs. test Accuracy', { 'Training' : training_accuracy, 'test' : test_accuracy }, epoch + 1)
             print(f"test accuracy: {test_accuracy}, train accuracy: {training_accuracy}")
             self.writer.flush()
         print(f'Finished Training model: {self.description}')
