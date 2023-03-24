@@ -14,6 +14,7 @@ BATCH_SIZE = 128
 LERANING_RATE = 0.07
 MOMENTUM = 0.9
 WEIGHT_DECAY = 0.0001
+DROP_OUT = 0.5
 
 ########### EXPERMINETS ###########
 # Without normalization
@@ -104,6 +105,7 @@ class ModelTrainer():
 
     def calculate_accuracy(self, model, data_loader):
         # Set model to evaluation mode
+        # The accuracy is calculated only on the test set - without dropout
         model.eval()
         
         # Initialize counters
@@ -130,10 +132,11 @@ class ModelTrainer():
 # Create lenet5 model for fashion MNIST dataset
 class LeNet5(nn.Module):
     LAST_CONV_OUT_CHANNEL = 16
-    def __init__(self, batch_normalization=False):
+    def __init__(self, batch_normalization=False, dropout=0):
         super(LeNet5, self).__init__()
         self.batch_normalization = batch_normalization
         # Added 2 padding to make the output size same as input size
+        self.dropout = nn.Dropout2d(dropout) 
         self.conv1 = nn.Conv2d(in_channels=1, out_channels=6, kernel_size=5, padding=2)
         self.bn1 = nn.BatchNorm2d(6)  # Add batch normalization after conv1
         self.pool1 = nn.AvgPool2d(kernel_size=2, stride=2)
@@ -162,13 +165,17 @@ class LeNet5(nn.Module):
         return x
     
     def forward_without_bn(self, x):
-        x = tanh(self.conv1(x))
+        """
+        Forward pass without batch normalization
+        on default this function dropout with 0% probability (no dropout)
+        """
+        x = tanh(self.dropout(self.conv1(x)))
         x = self.pool1(x)
-        x = tanh(self.conv2(x))
+        x = tanh(self.dropout(self.conv2(x)))
         x = self.pool2(x)
         x = x.view(-1, 16 * 5 * 5)
-        x = tanh(self.fc1(x))
-        x = tanh(self.fc2(x))
+        x = tanh(self.dropout(self.fc1(x)))
+        x = tanh(self.dropout(self.fc2(x)))
         x = self.fc3(x)
         return x
     
@@ -200,3 +207,4 @@ if __name__ == '__main__':
     ModelTrainer(LeNet5(), LERANING_RATE, MOMENTUM, BATCH_SIZE, EPOCH_NUMBER, training_loader, test_loader).train_model()
     ModelTrainer(LeNet5(batch_normalization=True), LERANING_RATE, MOMENTUM, BATCH_SIZE, EPOCH_NUMBER, training_loader, test_loader).train_model()
     ModelTrainer(LeNet5(), LERANING_RATE, MOMENTUM, BATCH_SIZE, EPOCH_NUMBER, training_loader, test_loader, weight_decay=WEIGHT_DECAY).train_model()
+    ModelTrainer(LeNet5(dropout=DROP_OUT), LERANING_RATE, MOMENTUM, BATCH_SIZE, EPOCH_NUMBER, training_loader, test_loader).train_model()
