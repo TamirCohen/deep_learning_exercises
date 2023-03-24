@@ -24,7 +24,7 @@ MOMENTUM = 0.9
 
 class ModelTrainer():
     LOSS_LOG_INTERVAL = 100
-    def __init__(self, model, learning_rate, momentum, batch_size, epoch_number, training_loader, test_loader) -> None:
+    def __init__(self, model, learning_rate, momentum, batch_size, epoch_number, training_loader, test_loader, weight_decay=0) -> None:
         self.learning_rate = learning_rate
         self.batch_size = batch_size
         self.epoch_number = epoch_number
@@ -32,9 +32,9 @@ class ModelTrainer():
         self.test_loader = test_loader
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = model.to(self.device)
-        self.loss_fn = nn.CrossEntropyLoss()
-        self.optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum)
-        self.writer = SummaryWriter('runs/fashion_trainer_Parameters_{}_{}_{}'.format(learning_rate, momentum, batch_size))
+        self.loss_fn = nn.CrossEntropyLoss
+        self.optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum, weight_decay=weight_decay)
+        self.writer = SummaryWriter('runs/fashion_trainer_Parameters_{}_{}_{}_{}'.format(learning_rate, momentum, batch_size, model.description))
         print("Using {} device".format(self.device))
     
     def _train_one_epoch(self, epoch_index, tb_writer):
@@ -129,18 +129,38 @@ class ModelTrainer():
 # Create lenet5 model for fashion MNIST dataset
 class LeNet5(nn.Module):
     LAST_CONV_OUT_CHANNEL = 16
-    def __init__(self):
+    def __init__(self, batch_normalization=False):
         super(LeNet5, self).__init__()
+        self.batch_normalization = batch_normalization
         # Added 2 padding to make the output size same as input size
         self.conv1 = nn.Conv2d(in_channels=1, out_channels=6, kernel_size=5, padding=2)
+        self.bn1 = nn.BatchNorm2d(6)  # Add batch normalization after conv1
         self.pool1 = nn.AvgPool2d(kernel_size=2, stride=2)
         self.conv2 = nn.Conv2d(in_channels=6, out_channels=self.LAST_CONV_OUT_CHANNEL, kernel_size=5)
+        self.bn2 = nn.BatchNorm2d(self.LAST_CONV_OUT_CHANNEL)  # Add batch normalization after conv2
         self.pool2 = nn.AvgPool2d(kernel_size=2, stride=2)
         self.fc1 = nn.Linear(self.LAST_CONV_OUT_CHANNEL * 5 * 5, 120)
+        self.bn3 = nn.BatchNorm1d(120)  # Add batch normalization after fc1
         self.fc2 = nn.Linear(120, 84)
+        self.bn4 = nn.BatchNorm1d(84)  # Add batch normalization after fc2
         self.fc3 = nn.Linear(84, 10)
+        self.description = "LeNet5, batch normalization: {}".format(self.batch_normalization)
 
-    def forward(self, x):
+    def foraward_with_bn(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.conv2(self.pool1(tanh(x)))
+        x = self.bn2(x)
+        x = self.pool2(tanh(x))
+        x = x.view(-1, 16 * 5 * 5)
+        x = self.fc1(x)
+        x = self.bn3(x)
+        x = self.fc2(tanh(x))
+        x = self.bn4(x)
+        x = self.fc3(x)
+        return x
+    
+    def forward_without_bn(self, x):
         x = tanh(self.conv1(x))
         x = self.pool1(x)
         x = tanh(self.conv2(x))
@@ -150,6 +170,12 @@ class LeNet5(nn.Module):
         x = tanh(self.fc2(x))
         x = self.fc3(x)
         return x
+    
+    def forward(self, x):
+        if self.batch_normalization:
+            return self.foraward_with_bn(x)
+        else:
+            return self.forward_without_bn(x)
 
 def initialize_data_loaders() -> Tuple[DataLoader, DataLoader]: 
     transform = transforms.Compose(
@@ -171,3 +197,4 @@ if __name__ == '__main__':
     training_loader, test_loader = initialize_data_loaders()
 
     ModelTrainer(LeNet5(), LERANING_RATE, MOMENTUM, BATCH_SIZE, EPOCH_NUMBER, training_loader, test_loader).train_model()
+    ModelTrainer(LeNet5(batch_normalization=True), LERANING_RATE, MOMENTUM, BATCH_SIZE, EPOCH_NUMBER, training_loader, test_loader).train_model()
