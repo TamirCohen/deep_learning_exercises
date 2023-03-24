@@ -14,7 +14,7 @@ BATCH_SIZE = 128
 LERANING_RATE = 0.07
 MOMENTUM = 0.9
 WEIGHT_DECAY = 0.0001
-DROP_OUT = 0.5
+DROP_OUT = 0.2
 
 ########### EXPERMINETS ###########
 # Without normalization
