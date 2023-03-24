@@ -33,7 +33,7 @@ class ModelTrainer():
         self.test_loader = test_loader
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = model.to(self.device)
-        self.loss_fn = nn.CrossEntropyLoss
+        self.loss_fn = nn.CrossEntropyLoss()
         self.optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum, weight_decay=weight_decay)
         self.writer = SummaryWriter('runs/fashion_trainer_Parameters_{}_{}_{}_{}_weight_decay_'.format(learning_rate, momentum, batch_size, model.description, weight_decay))
         print("Using {} device".format(self.device))
@@ -76,7 +76,7 @@ class ModelTrainer():
         return training_loss
     
     def train_model(self):
-        for epoch in range(1, self.epoch_number):
+        for epoch in range(0, self.epoch_number):
             self.model.train(True)
             train_loss = self._train_one_epoch(epoch, self.writer)
             
