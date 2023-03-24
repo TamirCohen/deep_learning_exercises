@@ -13,6 +13,7 @@ EPOCH_NUMBER = 10
 BATCH_SIZE = 128
 LERANING_RATE = 0.07
 MOMENTUM = 0.9
+WEIGHT_DECAY = 0.0001
 
 ########### EXPERMINETS ###########
 # Without normalization
@@ -34,7 +35,7 @@ class ModelTrainer():
         self.model = model.to(self.device)
         self.loss_fn = nn.CrossEntropyLoss
         self.optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum, weight_decay=weight_decay)
-        self.writer = SummaryWriter('runs/fashion_trainer_Parameters_{}_{}_{}_{}'.format(learning_rate, momentum, batch_size, model.description))
+        self.writer = SummaryWriter('runs/fashion_trainer_Parameters_{}_{}_{}_{}_weight_decay_'.format(learning_rate, momentum, batch_size, model.description, weight_decay))
         print("Using {} device".format(self.device))
     
     def _train_one_epoch(self, epoch_index, tb_writer):
@@ -198,3 +199,4 @@ if __name__ == '__main__':
 
     ModelTrainer(LeNet5(), LERANING_RATE, MOMENTUM, BATCH_SIZE, EPOCH_NUMBER, training_loader, test_loader).train_model()
     ModelTrainer(LeNet5(batch_normalization=True), LERANING_RATE, MOMENTUM, BATCH_SIZE, EPOCH_NUMBER, training_loader, test_loader).train_model()
+    ModelTrainer(LeNet5(), LERANING_RATE, MOMENTUM, BATCH_SIZE, EPOCH_NUMBER, training_loader, test_loader, weight_decay=WEIGHT_DECAY).train_model()
