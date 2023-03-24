@@ -36,7 +36,8 @@ class ModelTrainer():
         self.model = model.to(self.device)
         self.loss_fn = nn.CrossEntropyLoss()
         self.optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum, weight_decay=weight_decay)
-        self.writer = SummaryWriter('runs/fashion_trainer_Parameters_{}_{}_{}_{}_weight_decay_'.format(learning_rate, momentum, batch_size, model.description, weight_decay))
+        self.description = 'runs/fashion_trainer_Parameters_{}_{}_{}_{}_weight_decay_{}'.format(learning_rate, momentum, batch_size, model.description, weight_decay)
+        self.writer = SummaryWriter(self.description)
         print("Using {} device".format(self.device))
     
     def _train_one_epoch(self, epoch_index, tb_writer):
@@ -97,10 +98,14 @@ class ModelTrainer():
             self.writer.add_scalars('Training vs. test Loss',
                         { 'Training' : train_loss, 'test' : test_loss },
                         epoch + 1)
-            test_accuracy = self.calculate_accuracy(self.model, test_loader)
-            self.writer.add_scalar('Accuracy/test', test_accuracy, epoch + 1)
-            print(f"test accuracy: {test_accuracy}")
+            test_accuracy = self.calculate_accuracy(self.model, self.test_loader)
+            training_accuracy = self.calculate_accuracy(self.model, self.training_loader)
+
+            self.writer.add_scalar('Training vs. test Accuracy', { 'Training' : training_accuracy, 'test' : test_accuracy }, epoch + 1)
+            print(f"test accuracy: {test_accuracy}, train accuracy: {training_accuracy}")
             self.writer.flush()
+        print(f'Finished Training model: {self.description}')
+        print(f'Training accuracy: {training_accuracy}, test accuracy: {test_accuracy}')
         self.writer.close()
 
     def calculate_accuracy(self, model, data_loader):
@@ -148,7 +153,7 @@ class LeNet5(nn.Module):
         self.fc2 = nn.Linear(120, 84)
         self.bn4 = nn.BatchNorm1d(84)  # Add batch normalization after fc2
         self.fc3 = nn.Linear(84, 10)
-        self.description = "LeNet5, batch normalization: {}".format(self.batch_normalization)
+        self.description = "LeNet5, batch normalization: {}, Dropout {}".format(self.batch_normalization, dropout)
 
     def foraward_with_bn(self, x):
         x = self.conv1(x)
