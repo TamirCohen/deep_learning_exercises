@@ -9,6 +9,8 @@ from torch.utils.tensorboard import SummaryWriter
 from typing import Tuple
 
 DATASET_PATH = './data_set'
+# Epoch numer is larger than 10, because the regularized model is not overfitting
+REGULARZIED_MODEL_EPOCH_NUMBER = 13
 EPOCH_NUMBER = 10
 BATCH_SIZE = 128
 LERANING_RATE = 0.07
@@ -26,7 +28,7 @@ DROP_OUT = 0.2
 
 class ModelTrainer():
     LOSS_LOG_INTERVAL = 100
-    def __init__(self, model, learning_rate, momentum, batch_size, epoch_number, training_loader, test_loader, weight_decay=0) -> None:
+    def __init__(self, model, learning_rate, momentum, batch_size, epoch_number, training_loader, test_loader, title, weight_decay=0) -> None:
         self.learning_rate = learning_rate
         self.batch_size = batch_size
         self.epoch_number = epoch_number
@@ -38,6 +40,7 @@ class ModelTrainer():
         self.optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum, weight_decay=weight_decay)
         self.description = 'runs/fashion_trainer_Parameters_{}_{}_{}_{}_weight_decay_{}'.format(learning_rate, momentum, batch_size, model.description, weight_decay)
         self.writer = SummaryWriter(self.description)
+        self.title = title
         print("Using {} device".format(self.device))
     
     def _train_one_epoch(self, epoch_index, tb_writer):
@@ -101,7 +104,7 @@ class ModelTrainer():
             test_accuracy = self.calculate_accuracy(self.model, self.test_loader)
             training_accuracy = self.calculate_accuracy(self.model, self.training_loader)
 
-            self.writer.add_scalars('Training vs. test Accuracy', { 'Training' : training_accuracy, 'test' : test_accuracy }, epoch + 1)
+            self.writer.add_scalars(f'Training vs. test Accuracy: {self.title}', { 'Training' : training_accuracy, 'test' : test_accuracy }, epoch + 1)
             print(f"test accuracy: {test_accuracy}, train accuracy: {training_accuracy}")
             self.writer.flush()
         print(f'Finished Training model: {self.description}')
@@ -209,7 +212,7 @@ def initialize_data_loaders() -> Tuple[DataLoader, DataLoader]:
 if __name__ == '__main__':
     training_loader, test_loader = initialize_data_loaders()
 
-    ModelTrainer(LeNet5(), LERANING_RATE, MOMENTUM, BATCH_SIZE, EPOCH_NUMBER, training_loader, test_loader).train_model()
-    ModelTrainer(LeNet5(batch_normalization=True), LERANING_RATE, MOMENTUM, BATCH_SIZE, EPOCH_NUMBER, training_loader, test_loader).train_model()
-    ModelTrainer(LeNet5(), LERANING_RATE, MOMENTUM, BATCH_SIZE, EPOCH_NUMBER, training_loader, test_loader, weight_decay=WEIGHT_DECAY).train_model()
-    ModelTrainer(LeNet5(dropout=DROP_OUT), LERANING_RATE, MOMENTUM, BATCH_SIZE, EPOCH_NUMBER, training_loader, test_loader).train_model()
+    ModelTrainer(LeNet5(), LERANING_RATE, MOMENTUM, BATCH_SIZE, EPOCH_NUMBER, training_loader, test_loader, title="").train_model()
+    ModelTrainer(LeNet5(batch_normalization=True), LERANING_RATE, MOMENTUM, BATCH_SIZE, REGULARZIED_MODEL_EPOCH_NUMBER, training_loader, test_loader, title=f"with batch normalization").train_model()
+    ModelTrainer(LeNet5(), LERANING_RATE, MOMENTUM, BATCH_SIZE, REGULARZIED_MODEL_EPOCH_NUMBER, training_loader, test_loader, weight_decay=WEIGHT_DECAY, title=f"With weight decay {WEIGHT_DECAY}").train_model()
+    ModelTrainer(LeNet5(dropout=DROP_OUT), LERANING_RATE, MOMENTUM, BATCH_SIZE, REGULARZIED_MODEL_EPOCH_NUMBER, training_loader, test_loader, title=f"with dropout {DROP_OUT}").train_model()
