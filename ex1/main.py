@@ -24,7 +24,6 @@ DROP_OUT = 0.2
 # LERANING_RATE = 0.01, BATCH_SIZE = 64 converges fast, but oscillates a lot
 # LERANING_RATE = 0.07, MOMENTUM = 0.9, BATCH_SIZE = 128, EPOCH_NUMBER = 10. the increased batch size reduced the oscilations. It converges to 0.9?
 
-#TODO consider adding early stopping
 
 class ModelTrainer():
     LOSS_LOG_INTERVAL = 100
