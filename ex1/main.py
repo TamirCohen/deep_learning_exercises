@@ -1,5 +1,6 @@
 # create pytorch script
 import torch
+import torch.cuda
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import tanh
