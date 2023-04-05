@@ -98,13 +98,13 @@ class ModelTrainer():
             print(f'Epoch {epoch} LOSS train {train_loss} test {test_loss}')
             # Log the running loss averaged per batch
             # for both training and test
-            self.writer.add_scalars('Training vs. test Loss',
+            self.writer.add_scalars('Training_vs_test_Loss',
                         { 'Training' : train_loss, 'test' : test_loss },
                         epoch + 1)
             test_accuracy = self.calculate_accuracy(self.model, self.test_loader)
             training_accuracy = self.calculate_accuracy(self.model, self.training_loader)
 
-            self.writer.add_scalars(f'Training vs. test Accuracy: {self.title}', { 'Training' : training_accuracy, 'test' : test_accuracy }, epoch + 1)
+            self.writer.add_scalars(f'Training_vs_test_Accuracy: {self.title}', { 'Training' : training_accuracy, 'test' : test_accuracy }, epoch + 1)
             print(f"test accuracy: {test_accuracy}, train accuracy: {training_accuracy}")
             self.writer.flush()
         print(f'Finished Training model: {self.description}')
@@ -156,7 +156,7 @@ class LeNet5(nn.Module):
         self.fc2 = nn.Linear(120, 84)
         self.bn4 = nn.BatchNorm1d(84)  # Add batch normalization after fc2
         self.fc3 = nn.Linear(84, 10)
-        self.description = "LeNet5, batch normalization: {}, Dropout {}".format(self.batch_normalization, dropout)
+        self.description = "LeNet5_batch_normalization__{}__Dropout_{}".format(self.batch_normalization, dropout)
 
     def foraward_with_bn(self, x):
         x = self.conv1(x)
