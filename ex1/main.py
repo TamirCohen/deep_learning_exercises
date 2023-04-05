@@ -8,6 +8,7 @@ from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from typing import Tuple
+import os
 
 DATASET_PATH = './data_set'
 # Epoch numer is larger than 10, because the regularized model is not overfitting
@@ -38,7 +39,7 @@ class ModelTrainer():
         self.model = model.to(self.device)
         self.loss_fn = nn.CrossEntropyLoss()
         self.optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum, weight_decay=weight_decay)
-        self.description = 'runs/fashion_trainer_Parameters_{}_{}_{}_{}_weight_decay_{}'.format(learning_rate, momentum, batch_size, model.description, weight_decay)
+        self.description = os.path.join("runs", 'fashion_trainer_Parameters_{}_{}_{}_{}_weight_decay_{}'.format(learning_rate, momentum, batch_size, model.description, weight_decay))
         self.writer = SummaryWriter(self.description)
         self.title = title
         print("Using {} device".format(self.device))
@@ -104,7 +105,7 @@ class ModelTrainer():
             test_accuracy = self.calculate_accuracy(self.model, self.test_loader)
             training_accuracy = self.calculate_accuracy(self.model, self.training_loader)
 
-            self.writer.add_scalars(f'Training_vs_test_Accuracy: {self.title}', { 'Training' : training_accuracy, 'test' : test_accuracy }, epoch + 1)
+            self.writer.add_scalars(f'Training_vs_test_Accuracy_{self.title}', { 'Training' : training_accuracy, 'test' : test_accuracy }, epoch + 1)
             print(f"test accuracy: {test_accuracy}, train accuracy: {training_accuracy}")
             self.writer.flush()
         print(f'Finished Training model: {self.description}')
@@ -156,7 +157,7 @@ class LeNet5(nn.Module):
         self.fc2 = nn.Linear(120, 84)
         self.bn4 = nn.BatchNorm1d(84)  # Add batch normalization after fc2
         self.fc3 = nn.Linear(84, 10)
-        self.description = "LeNet5_batch_normalization__{}__Dropout_{}".format(self.batch_normalization, dropout)
+        self.description = "LeNet5_batch_normalization_{}_Dropout_{}".format(self.batch_normalization, dropout)
 
     def foraward_with_bn(self, x):
         x = self.conv1(x)
