@@ -1,17 +1,16 @@
 import torch.nn as nn
 import torch
-from torchtext.data.utils import get_tokenizer
-from torchtext.vocab import Vocab
 from collections import Counter
 from torch.utils.data import DataLoader
 from functools import partial
-
+from typing import List
 # set device to GPU if available
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 #TODO the model is unrolled 35 times
-
+#TODO (successive minibatches sequentially traverse the training set
+#TODO its parameters are initialized uniformly in [−0.05, 0.05]
 NUM_LAYERS = 2
 HIDDEN_SIZE = 200
 INPUT_SIZE = 100
@@ -27,34 +26,56 @@ def load_data():
 
 # define tokenizer and build vocabulary
 
-def build_vocab(data) -> Vocab:
+def tokenize(text_data: str):
+    """
+    Tokenize the data
+    """
+    return text_data.split()
+
+def build_vocab(text_data: str):
     """
     Build a vocabulary from the data
+    ie: mapping between a word and an index
     """
-    tokenizer = get_tokenizer('basic_english')
+    words = tokenize(text_data)
     counter = Counter()
-    for line in data.splitlines():
-        counter.update(tokenizer(line))
-    vocab = Vocab(counter)
-    return vocab
+    counter.update(words)
+    return {word: index for index, word in enumerate(counter.keys())}
 
-def collect_fn(data, vocab, tokenizer):
-    text = [torch.tensor([vocab[token] for token in tokenizer(line)], dtype=torch.long) for line in data.splitlines()] 
-    # Create a tensor of the same length as the longest sentence in the batch
-    # each row is a sentence, each column is a word
-    return nn.utils.rnn.pad_sequence(text, batch_first=True)
+class PennTreeBankDataset(torch.utils.data.Dataset):
+    def __init__(self, raw_data: str, vocab: dict):
+        self.raw_data = raw_data
+        self.vocab = vocab
+        self.sentences = self.raw_data.splitlines()
+        
+    def __get_item__(self, index):
+        """
+        get the sentence at the index, then shift it by one word to the right to get the target sentence
+        """
+        sentence_vocab = self.sentence_to_vocab(tokenize(self.sentences[index]), self.vocab)
+        sentence_tensor = torch.tensor(sentence_vocab, dtype=torch.long)
+        # shift sentence by one word
+        target_vocab = sentence_vocab[1:] + [0]
+        target_tensor = torch.tensor(target_vocab, dtype=torch.long)
+        return sentence_tensor, target_tensor
+        
+    def __len__(self):
+        return len(self.sentences)
 
-def create_data_loaders(train_data, validation_data, test_data, batch_size, vocab):
-    collect_fn_with_params = partial(collect_fn, vocab=vocab, tokenizer=get_tokenizer('basic_english'))
-    train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, collate_fn=collect_fn_with_params)
-    val_loader = DataLoader(validation_data, batch_size=batch_size, shuffle=False, collate_fn=collect_fn_with_params)
-    test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, collate_fn=collect_fn_with_params)
+    def sentence_to_vocab(self, words: str, vocab: dict):
+        """
+        Convert the data to a vector of indices
+        """
+        return [vocab[word] for word in words]
+
+def create_data_loaders(train_data: str, validation_data: str, test_data: str, batch_size: int, vocab: dict):
+    train_loader = DataLoader(PennTreeBankDataset(train_data, vocab), batch_size=batch_size, shuffle=True, collate_fn=nn.utils.rnn.pad_sequence)
+    val_loader = DataLoader(PennTreeBankDataset(validation_data, vocab), batch_size=batch_size, shuffle=False, collate_fn=nn.utils.rnn.pad_sequence)
+    test_loader = DataLoader(PennTreeBankDataset(test_data, vocab), batch_size=batch_size, shuffle=False, collate_fn=nn.utils.rnn.pad_sequence)
     return train_loader, val_loader, test_loader
 
-# dropout is between the layers - not the recurrent connections
-
 class LstmRegularized(nn.Module):
-    
+    #TODO not tested yet :( - and not working probably
     def __init__(self, input_size, hidden_size, output_size, num_layers, dropout):
         super(LstmRegularized, self).__init__()
         self.input_size = input_size
@@ -75,10 +96,10 @@ class LstmRegularized(nn.Module):
 def main():
     # The vocab is built from the training data
     # If a word is missing from the training data, it will be replaced with <unk>
-    train_data, valid_data, test_data =  load_data()
+    train_data, valid_data, test_data = load_data()
     vocab = build_vocab(train_data)
-    train_loader, valid_loader, test_loader = create_data_loaders(train_data, valid_data, test_data, vocab, BATCH_SIZE)
-    model = LstmRegularized(input_size=len(vocab), hidden_size=HIDDEN_SIZE, output_size=len(vocab), num_layers=NUM_LAYERS, dropout=DROPOUT)
+    
+    train_loader, valid_loader, test_loader = create_data_loaders(train_data, valid_data, test_data, BATCH_SIZE, vocab)
 
 if __name__ == "__main__":
     main()
