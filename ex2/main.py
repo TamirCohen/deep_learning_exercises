@@ -6,7 +6,7 @@ from typing import List, Tuple
 # set device to GPU if available
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-
+#TODO amazing reference https://github.com/pytorch/examples/blob/e11e0796fc02cc2cd5b6ec2ad7cea21f77e25402/word_language_model/main.py#L104
 #TODO the model is unrolled 35 times
 #TODO (successive minibatches sequentially traverse the training set
 #TODO its parameters are initialized uniformly in [−0.05, 0.05]
@@ -148,8 +148,10 @@ class LstmRegularized(nn.Module):
                 print(f"received loss {loss}")
                 loss.backward()
                 self.optimizer.step()
-                print(sentence)
+
                 # Using the hidden states of the last batch as the intializor
+                # We need to detach the hidden_states so the it wont be traersed by the backward
+                hidden_states = (hidden_states[0].detach(), hidden_states[1].detach())
 
 def main():
     # The vocab is built from the training data
