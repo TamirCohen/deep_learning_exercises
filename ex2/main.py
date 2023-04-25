@@ -135,13 +135,11 @@ class LstmRegularized(nn.Module):
                 print(f"Training batch {batch_number} epoch {epoch}")
                 # Added the dimensiton of the word embedding (Which is one in this case)
                 # Transpose so it will contain the correct dimensions for the LSTM
-                sentence = sentence.unsqueeze(-1)
-                # sentence = sentence.unsqueeze(-1)
+                sentence = sentence.unsqueeze(-1).float()
                 # Model unrolling iterations
                 #TODO it should be 35 - validate it
                 self.optimizer.zero_grad()
 
-                import pdb; pdb.set_trace()
                 word_output_probabilities, hidden_states = self.forward(sentence, hidden_states)
                 word_output_probabilities = word_output_probabilities.view(-1, self.output_size)
                 target_sentence = target_sentence.view(-1)
