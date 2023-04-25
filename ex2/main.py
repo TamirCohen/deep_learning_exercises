@@ -2,8 +2,7 @@ import torch.nn as nn
 import torch
 from collections import Counter
 from torch.utils.data import DataLoader
-from functools import partial
-from typing import List
+from typing import List, Tuple
 # set device to GPU if available
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -11,12 +10,19 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 #TODO the model is unrolled 35 times
 #TODO (successive minibatches sequentially traverse the training set
 #TODO its parameters are initialized uniformly in [−0.05, 0.05]
+#TODO should add <eos> token to the end of each sentence?
+
+# number of layers in the LSTM - as specified in the paper
 NUM_LAYERS = 2
+# The size of the hidden state of the LSTM - as specified in the paper
 HIDDEN_SIZE = 200
-INPUT_SIZE = 100
-OUTPUT_SIZE = 100
-DROPOUT = 0.2
+# not sure
+INPUT_SIZE = 1
+# Size of the minibatch as specified in the paper
 BATCH_SIZE = 20
+LEARNING_RATE = 0.001
+
+DROPOUT = 0.2
 
 def load_data():
     train_data = open('PTB/ptb.train.txt', 'r').read()
@@ -48,7 +54,7 @@ class PennTreeBankDataset(torch.utils.data.Dataset):
         self.vocab = vocab
         self.sentences = self.raw_data.splitlines()
         
-    def __get_item__(self, index):
+    def __getitem__(self, index):
         """
         get the sentence at the index, then shift it by one word to the right to get the target sentence
         """
@@ -68,10 +74,25 @@ class PennTreeBankDataset(torch.utils.data.Dataset):
         """
         return [vocab[word] for word in words]
 
+def pad_sentence_and_target(batch: List[Tuple[torch.Tensor, torch.Tensor]]):
+    """
+    get tuples of sentence and target, then pad each of them to the maximum length
+    """
+    
+    sentences = [item[0] for item in batch]
+    target_sentences = [item[1] for item in batch]
+
+    lengths = torch.LongTensor([len(seq) for seq in sentences])
+    # pad sequences
+    padded_sentences = torch.nn.utils.rnn.pad_sequence(sentences, batch_first=True)
+    padded_targets = torch.nn.utils.rnn.pad_sequence(target_sentences, batch_first=True)
+    #TODO should I return this as a tuple? 
+    return padded_sentences, padded_targets, lengths
+
 def create_data_loaders(train_data: str, validation_data: str, test_data: str, batch_size: int, vocab: dict):
-    train_loader = DataLoader(PennTreeBankDataset(train_data, vocab), batch_size=batch_size, shuffle=True, collate_fn=nn.utils.rnn.pad_sequence)
-    val_loader = DataLoader(PennTreeBankDataset(validation_data, vocab), batch_size=batch_size, shuffle=False, collate_fn=nn.utils.rnn.pad_sequence)
-    test_loader = DataLoader(PennTreeBankDataset(test_data, vocab), batch_size=batch_size, shuffle=False, collate_fn=nn.utils.rnn.pad_sequence)
+    train_loader = DataLoader(PennTreeBankDataset(train_data, vocab), batch_size=batch_size, shuffle=True, collate_fn=pad_sentence_and_target)
+    val_loader = DataLoader(PennTreeBankDataset(validation_data, vocab), batch_size=batch_size, shuffle=False, collate_fn=pad_sentence_and_target)
+    test_loader = DataLoader(PennTreeBankDataset(test_data, vocab), batch_size=batch_size, shuffle=False, collate_fn=pad_sentence_and_target)
     return train_loader, val_loader, test_loader
 
 class LstmRegularized(nn.Module):
@@ -83,16 +104,55 @@ class LstmRegularized(nn.Module):
         self.output_size = output_size
         self.num_layers  = num_layers
         self.dropout = dropout
-        self.lstm = torch.nn.LSTM(input_size, hidden_size, num_layers, dropout=dropout)
+        self.lstm = torch.nn.LSTM(input_size, hidden_size, num_layers, dropout=dropout, batch_first=True)
         self.linear = torch.nn.Linear(hidden_size, output_size)
         self.softmax = torch.nn.LogSoftmax(dim=1)
+        self.loss_function = torch.nn.functional.nll_loss
+        # Cast the LSTM weights and biases to long data type
+        self.optimizer = torch.optim.SGD(self.parameters(), lr=LEARNING_RATE)
     
     def forward(self, input, hidden):
+        #TODO - self._flat_weights - Float Tensor
         output, hidden = self.lstm(input, hidden)
         output = self.linear(output)
         output = self.softmax(output)
         return output, hidden
-        
+    
+    # def init_hidden(self, batch_size):
+    #     return (torch.zeros(self.num_layers, batch_size, self.hidden_size),
+    #             torch.zeros(self.num_layers, batch_size, self.hidden_size))
+    
+    def train(self, train_loader, valid_loader, test_loader, num_epochs):
+        # Epoch iterations
+        for epoch in range(num_epochs):
+            print(f"Training epoch {epoch}")
+
+            # Initialize hidden state
+            hidden_states = None
+            # Batch iterations
+            for batch_number, (sentence, target_sentence, lengths) in enumerate(train_loader):
+                
+                print(f"Training batch {batch_number} epoch {epoch}")
+                # Added the dimensiton of the word embedding (Which is one in this case)
+                # Transpose so it will contain the correct dimensions for the LSTM
+                sentence = sentence.unsqueeze(-1)
+                # sentence = sentence.unsqueeze(-1)
+                # Model unrolling iterations
+                #TODO it should be 35 - validate it
+                self.optimizer.zero_grad()
+
+                import pdb; pdb.set_trace()
+                word_output_probabilities, hidden_states = self.forward(sentence, hidden_states)
+                word_output_probabilities = word_output_probabilities.view(-1, self.output_size)
+                target_sentence = target_sentence.view(-1)
+
+                loss = self.loss_function(word_output_probabilities, target_sentence)
+                print(f"received loss {loss}")
+                loss.backward()
+                self.optimizer.step()
+                print(sentence)
+                # Using the hidden states of the last batch as the intializor
+
 def main():
     # The vocab is built from the training data
     # If a word is missing from the training data, it will be replaced with <unk>
@@ -100,6 +160,8 @@ def main():
     vocab = build_vocab(train_data)
     
     train_loader, valid_loader, test_loader = create_data_loaders(train_data, valid_data, test_data, BATCH_SIZE, vocab)
+    lstm_model = LstmRegularized(INPUT_SIZE, HIDDEN_SIZE, len(vocab), NUM_LAYERS, DROPOUT)
+    print(lstm_model.train(train_loader, valid_loader, test_loader, 1))
 
 if __name__ == "__main__":
     main()
