@@ -126,6 +126,26 @@ class LstmRegularized(nn.Module):
         output = self.softmax(output)
         return output, hidden
     
+    def evaluate_model(self, data_loader: DataLoader) -> float:
+        correct = 0
+        total = 0
+        #TODO consider testing all the shiftings of the sentence
+        with torch.no_grad():
+            for sentence, target_sentence, _ in data_loader:
+                try:
+                    self.lstm.eval()
+                    
+                    word_output_probabilities, _ = self.forward(sentence, None)
+                    # get the index of the most probable word
+                    predicted_words = torch.argmax(word_output_probabilities, dim=2)
+                    correct += (predicted_words == target_sentence).sum().item()
+                    # increase the total number of words in the target sentence
+                    total += torch.numel(target_sentence)
+                finally:
+                    self.lstm.train()
+
+        return correct / total
+
     def train(self, train_loader, valid_loader, test_loader, num_epochs):
         # Epoch iterations
         for epoch in range(num_epochs):
@@ -158,6 +178,8 @@ class LstmRegularized(nn.Module):
                 # Using the hidden states of the last batch as the intializor
                 # We need to detach the hidden_states so the it wont be traersed by the backward
                 hidden_states = (hidden_states[0].detach(), hidden_states[1].detach())
+
+            print(f"Epoch {epoch} is done, accuracy on validation set is: {self.evaluate_model(valid_loader)}") 
 
 def main():
     # The vocab is built from the training data
