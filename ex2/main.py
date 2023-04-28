@@ -11,7 +11,9 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 #TODO (successive minibatches sequentially traverse the training set
 #TODO its parameters are initialized uniformly in [−0.05, 0.05]
 #TODO should add <eos> token to the end of each sentence?
+#TODO should I remove the <unk> token? and the , and .?
 
+EMBEDDING_SIZE = 100
 # number of layers in the LSTM - as specified in the paper
 NUM_LAYERS = 2
 # The size of the hidden state of the LSTM - as specified in the paper
@@ -59,10 +61,10 @@ class PennTreeBankDataset(torch.utils.data.Dataset):
         get the sentence at the index, then shift it by one word to the right to get the target sentence
         """
         sentence_vocab = self.sentence_to_vocab(tokenize(self.sentences[index]), self.vocab)
-        sentence_tensor = torch.tensor(sentence_vocab, dtype=torch.long)
+        sentence_tensor = torch.tensor(sentence_vocab, dtype=torch.long, device=device)
         # shift sentence by one word
         target_vocab = sentence_vocab[1:] + [0]
-        target_tensor = torch.tensor(target_vocab, dtype=torch.long)
+        target_tensor = torch.tensor(target_vocab, dtype=torch.long, device=device)
         return sentence_tensor, target_tensor
         
     def __len__(self):
@@ -97,14 +99,15 @@ def create_data_loaders(train_data: str, validation_data: str, test_data: str, b
 
 class LstmRegularized(nn.Module):
     #TODO not tested yet :( - and not working probably
-    def __init__(self, input_size, hidden_size, output_size, num_layers, dropout):
+    def __init__(self, embedding_size, vocab_size, hidden_size, output_size, num_layers, dropout):
         super(LstmRegularized, self).__init__()
-        self.input_size = input_size
+        self.embedding_size = embedding_size
         self.hidden_size = hidden_size
         self.output_size = output_size
         self.num_layers  = num_layers
         self.dropout = dropout
-        self.lstm = torch.nn.LSTM(input_size, hidden_size, num_layers, dropout=dropout, batch_first=True)
+        self.embedding = torch.nn.Embedding(vocab_size, embedding_size)
+        self.lstm = torch.nn.LSTM(embedding_size, hidden_size, num_layers, dropout=dropout, batch_first=True)
         self.linear = torch.nn.Linear(hidden_size, output_size)
         self.softmax = torch.nn.LogSoftmax(dim=1)
         self.loss_function = torch.nn.functional.nll_loss
@@ -112,15 +115,16 @@ class LstmRegularized(nn.Module):
         self.optimizer = torch.optim.SGD(self.parameters(), lr=LEARNING_RATE)
     
     def forward(self, input, hidden):
+        """
+        The input is a long tensor of size (batch_size, seq_len) which contains the indices of the words in the sentence
+        """
         #TODO - self._flat_weights - Float Tensor
-        output, hidden = self.lstm(input, hidden)
+        #TODO init word2vec embedding
+        embedding = self.embedding(input)
+        output, hidden = self.lstm(embedding, hidden)
         output = self.linear(output)
         output = self.softmax(output)
         return output, hidden
-    
-    # def init_hidden(self, batch_size):
-    #     return (torch.zeros(self.num_layers, batch_size, self.hidden_size),
-    #             torch.zeros(self.num_layers, batch_size, self.hidden_size))
     
     def train(self, train_loader, valid_loader, test_loader, num_epochs):
         # Epoch iterations
@@ -135,7 +139,7 @@ class LstmRegularized(nn.Module):
                 print(f"Training batch {batch_number} epoch {epoch}")
                 # Added the dimensiton of the word embedding (Which is one in this case)
                 # Transpose so it will contain the correct dimensions for the LSTM
-                sentence = sentence.unsqueeze(-1).float()
+                # sentence = sentence.unsqueeze(-1)
                 # Model unrolling iterations
                 #TODO it should be 35 - validate it
                 self.optimizer.zero_grad()
@@ -160,8 +164,9 @@ def main():
     vocab = build_vocab(train_data)
     
     train_loader, valid_loader, test_loader = create_data_loaders(train_data, valid_data, test_data, BATCH_SIZE, vocab)
-    lstm_model = LstmRegularized(INPUT_SIZE, HIDDEN_SIZE, len(vocab), NUM_LAYERS, DROPOUT)
-    print(lstm_model.train(train_loader, valid_loader, test_loader, 1))
+    lstm_model = LstmRegularized(EMBEDDING_SIZE, len(vocab), HIDDEN_SIZE, len(vocab), NUM_LAYERS, DROPOUT)
+    lstm_model.to(device)
+    lstm_model.train(train_loader, valid_loader, test_loader, 1)
 
 if __name__ == "__main__":
     main()
