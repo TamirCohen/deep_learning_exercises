@@ -23,7 +23,7 @@ INPUT_SIZE = 1
 # Size of the minibatch as specified in the paper
 BATCH_SIZE = 20
 LEARNING_RATE = 0.001
-
+NUM_EPOCHS = 10
 DROPOUT = 0.2
 
 def load_data():
@@ -99,13 +99,14 @@ def create_data_loaders(train_data: str, validation_data: str, test_data: str, b
 
 class LstmRegularized(nn.Module):
     #TODO not tested yet :( - and not working probably
-    def __init__(self, embedding_size, vocab_size, hidden_size, output_size, num_layers, dropout):
+    def __init__(self, embedding_size, vocab_size, hidden_size, output_size, num_layers, dropout, batch_size):
         super(LstmRegularized, self).__init__()
         self.embedding_size = embedding_size
         self.hidden_size = hidden_size
         self.output_size = output_size
         self.num_layers  = num_layers
         self.dropout = dropout
+        self.batch_size = batch_size
         self.embedding = torch.nn.Embedding(vocab_size, embedding_size)
         self.lstm = torch.nn.LSTM(embedding_size, hidden_size, num_layers, dropout=dropout, batch_first=True)
         self.linear = torch.nn.Linear(hidden_size, output_size)
@@ -118,7 +119,6 @@ class LstmRegularized(nn.Module):
         """
         The input is a long tensor of size (batch_size, seq_len) which contains the indices of the words in the sentence
         """
-        #TODO - self._flat_weights - Float Tensor
         #TODO init word2vec embedding
         embedding = self.embedding(input)
         output, hidden = self.lstm(embedding, hidden)
@@ -129,27 +129,29 @@ class LstmRegularized(nn.Module):
     def train(self, train_loader, valid_loader, test_loader, num_epochs):
         # Epoch iterations
         for epoch in range(num_epochs):
-            print(f"Training epoch {epoch}")
-
             # Initialize hidden state
             hidden_states = None
             # Batch iterations
             for batch_number, (sentence, target_sentence, lengths) in enumerate(train_loader):
-                
-                print(f"Training batch {batch_number} epoch {epoch}")
                 # Added the dimensiton of the word embedding (Which is one in this case)
                 # Transpose so it will contain the correct dimensions for the LSTM
                 # sentence = sentence.unsqueeze(-1)
                 # Model unrolling iterations
                 #TODO it should be 35 - validate it
+                
+                # Skip partial batches
+                if sentence.shape[0] != self.batch_size:
+                    continue
                 self.optimizer.zero_grad()
 
                 word_output_probabilities, hidden_states = self.forward(sentence, hidden_states)
                 word_output_probabilities = word_output_probabilities.view(-1, self.output_size)
                 target_sentence = target_sentence.view(-1)
 
+                #TODO validate the loss calculation
                 loss = self.loss_function(word_output_probabilities, target_sentence)
-                print(f"received loss {loss}")
+                if batch_number % 100 == 0:
+                    print(f"Training loss for batch {batch_number} epoch {epoch} is {loss}")
                 loss.backward()
                 self.optimizer.step()
 
@@ -164,9 +166,9 @@ def main():
     vocab = build_vocab(train_data)
     
     train_loader, valid_loader, test_loader = create_data_loaders(train_data, valid_data, test_data, BATCH_SIZE, vocab)
-    lstm_model = LstmRegularized(EMBEDDING_SIZE, len(vocab), HIDDEN_SIZE, len(vocab), NUM_LAYERS, DROPOUT)
+    lstm_model = LstmRegularized(EMBEDDING_SIZE, len(vocab), HIDDEN_SIZE, len(vocab), NUM_LAYERS, DROPOUT, BATCH_SIZE)
     lstm_model.to(device)
-    lstm_model.train(train_loader, valid_loader, test_loader, 1)
+    lstm_model.train(train_loader, valid_loader, test_loader, NUM_EPOCHS)
 
 if __name__ == "__main__":
     main()
