@@ -3,6 +3,8 @@ import torch
 from collections import Counter
 from torch.utils.data import DataLoader
 from typing import List, Tuple
+from torch.utils.tensorboard import SummaryWriter
+
 # set device to GPU if available
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -98,7 +100,6 @@ def create_data_loaders(train_data: str, validation_data: str, test_data: str, b
     return train_loader, val_loader, test_loader
 
 class LstmRegularized(nn.Module):
-    #TODO not tested yet :( - and not working probably
     def __init__(self, embedding_size, vocab_size, hidden_size, output_size, num_layers, dropout, batch_size):
         super(LstmRegularized, self).__init__()
         self.embedding_size = embedding_size
@@ -107,13 +108,17 @@ class LstmRegularized(nn.Module):
         self.num_layers  = num_layers
         self.dropout = dropout
         self.batch_size = batch_size
+        self.vocab_size = vocab_size
         self.embedding = torch.nn.Embedding(vocab_size, embedding_size)
         self.lstm = torch.nn.LSTM(embedding_size, hidden_size, num_layers, dropout=dropout, batch_first=True)
         self.linear = torch.nn.Linear(hidden_size, output_size)
-        self.softmax = torch.nn.LogSoftmax(dim=1)
+        self.logsoftmax = torch.nn.LogSoftmax(dim=1)
         self.loss_function = torch.nn.functional.nll_loss
         # Cast the LSTM weights and biases to long data type
         self.optimizer = torch.optim.SGD(self.parameters(), lr=LEARNING_RATE)
+        self.description = f"Lstm_Model_learning_{LEARNING_RATE}_dropout_{dropout}"
+        self.writer = SummaryWriter(self.description)
+
     
     def forward(self, input, hidden):
         """
@@ -123,28 +128,28 @@ class LstmRegularized(nn.Module):
         embedding = self.embedding(input)
         output, hidden = self.lstm(embedding, hidden)
         output = self.linear(output)
-        output = self.softmax(output)
+        # Using the logsoftmax instead of softmax - like the paper
+        # To get the probabilities of the words: torch.exp(output)
+        output = self.logsoftmax(output)
         return output, hidden
     
-    def evaluate_model(self, data_loader: DataLoader) -> float:
+    def calculate_perplexity(self, data_loader: DataLoader) -> float:
+        #TODO consider removing this function?
         correct = 0
         total = 0
         #TODO consider testing all the shiftings of the sentence
+        total_loss = 0
         with torch.no_grad():
             for sentence, target_sentence, _ in data_loader:
                 try:
                     self.lstm.eval()
-                    
+                    target_sentence = target_sentence.view(-1)
                     word_output_probabilities, _ = self.forward(sentence, None)
-                    # get the index of the most probable word
-                    predicted_words = torch.argmax(word_output_probabilities, dim=2)
-                    correct += (predicted_words == target_sentence).sum().item()
-                    # increase the total number of words in the target sentence
-                    total += torch.numel(target_sentence)
+                    word_output_probabilities = word_output_probabilities.view(-1, self.output_size)
+                    total_loss += self.loss_function(word_output_probabilities, target_sentence)
                 finally:
                     self.lstm.train()
-
-        return correct / total
+        return torch.exp(total_loss / len(data_loader))
 
     def train(self, train_loader, valid_loader, test_loader, num_epochs):
         # Epoch iterations
@@ -155,7 +160,6 @@ class LstmRegularized(nn.Module):
             for batch_number, (sentence, target_sentence, lengths) in enumerate(train_loader):
                 # Added the dimensiton of the word embedding (Which is one in this case)
                 # Transpose so it will contain the correct dimensions for the LSTM
-                # sentence = sentence.unsqueeze(-1)
                 # Model unrolling iterations
                 #TODO it should be 35 - validate it
                 
@@ -164,14 +168,25 @@ class LstmRegularized(nn.Module):
                     continue
                 self.optimizer.zero_grad()
 
-                word_output_probabilities, hidden_states = self.forward(sentence, hidden_states)
-                word_output_probabilities = word_output_probabilities.view(-1, self.output_size)
-                target_sentence = target_sentence.view(-1)
+                word_log_probabilities, hidden_states = self.forward(sentence, hidden_states)
 
+                #TODO use pack_padded_sequence to ignore the padding
+
+                # shape: (batch_size, seq_len, vocab_size)
+                # transpose to (batch_size, vocab_size, seq_len)
+                word_log_probabilities = word_log_probabilities.transpose(1, 2)
+                
                 #TODO validate the loss calculation
-                loss = self.loss_function(word_output_probabilities, target_sentence)
-                if batch_number % 100 == 0:
-                    print(f"Training loss for batch {batch_number} epoch {epoch} is {loss}")
+                #TODO the target sentence is array of vocab....
+                #TODO what to do if the sentence is short?
+                loss = self.loss_function(word_log_probabilities, target_sentence)
+                if batch_number % 200 == 0:
+                    #TODO graph should be in perplexity
+                    
+                    print(f"Training perplexity for batch {batch_number} epoch {epoch} is {torch.exp(loss)}")
+                    tb_x = epoch * len(train_loader) + batch_number + 1
+                    # self.writer.add_scalar("perplexity/train", self.calculate_perplexity(train_loader), tb_x)
+                    # self.writer.add_scalar("perplexity/test", self.calculate_perplexity(test_loader), tb_x)
                 loss.backward()
                 self.optimizer.step()
 
@@ -179,14 +194,13 @@ class LstmRegularized(nn.Module):
                 # We need to detach the hidden_states so the it wont be traersed by the backward
                 hidden_states = (hidden_states[0].detach(), hidden_states[1].detach())
 
-            print(f"Epoch {epoch} is done, accuracy on validation set is: {self.evaluate_model(valid_loader)}") 
+            print(f"Epoch {epoch} is done, accuracy on validation set is: {self.calculate_perplexity(valid_loader)}") 
 
 def main():
     # The vocab is built from the training data
     # If a word is missing from the training data, it will be replaced with <unk>
     train_data, valid_data, test_data = load_data()
     vocab = build_vocab(train_data)
-    
     train_loader, valid_loader, test_loader = create_data_loaders(train_data, valid_data, test_data, BATCH_SIZE, vocab)
     lstm_model = LstmRegularized(EMBEDDING_SIZE, len(vocab), HIDDEN_SIZE, len(vocab), NUM_LAYERS, DROPOUT, BATCH_SIZE)
     lstm_model.to(device)
@@ -194,3 +208,37 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
+# GOOD CODE 1
+# X = nn.utils.rnn.pack_padded_sequence(X, X_length_sorted)
+# X, self.hidden = self.gru(X, self.hidden)
+# X, output_lengths = nn.utils.rnn.pad_packed_sequence(X)
+
+# GOOD CODE
+
+# import torch.nn.utils.rnn as rnn_utils
+
+# # ...
+
+# # Pack the target sentences
+# packed_targets = rnn_utils.pack_padded_sequence(target_sentence, lengths, batch_first=True, enforce_sorted=False)
+
+# # Compute the word log probabilities
+# word_log_probabilities, hidden_states = self.forward(sentence, hidden_states)
+
+# # Transpose the word log probabilities to (batch_size, vocab_size, seq_len)
+# word_log_probabilities = word_log_probabilities.transpose(1, 2)
+
+# # Pack the word log probabilities using the same lengths as the targets
+# packed_word_log_probs = rnn_utils.pack_padded_sequence(word_log_probabilities, lengths, batch_first=True, enforce_sorted=False)
+
+# # Compute the NLL loss using the packed sequences
+# nll_loss = self.loss_function(packed_word_log_probs.data, packed_targets.data)
+
+# # Unpack the NLL loss and convert to perplexity
+# loss = rnn_utils.pad_packed_sequence(nll_loss, batch_first=True)[0].mean()
+# perplexity = torch.exp(loss)
