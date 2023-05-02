@@ -2,7 +2,7 @@ import torch.nn as nn
 import torch
 from collections import Counter
 from torch.utils.data import DataLoader
-from typing import List, Tuple
+from typing import List, Tuple, Any
 from torch.utils.tensorboard import SummaryWriter
 
 # set device to GPU if available
@@ -25,7 +25,7 @@ INPUT_SIZE = 1
 # Size of the minibatch as specified in the paper
 BATCH_SIZE = 20
 LEARNING_RATE = 0.001
-NUM_EPOCHS = 10
+NUM_EPOCHS = 20
 DROPOUT = 0.2
 
 def load_data():
@@ -144,17 +144,27 @@ class LstmRegularized(nn.Module):
         total = 0
         #TODO consider testing all the shiftings of the sentence
         total_loss = 0
+        total_perplexity = 0
         with torch.no_grad():
             for sentence, target_sentence, lengths in data_loader:
                 try:
                     self.lstm.eval()
-                    target_sentence = target_sentence.view(-1)
-                    word_output_probabilities, _ = self.forward(sentence, None)
-                    word_output_probabilities = word_output_probabilities.view(-1, self.output_size)
-                    total_loss += self.loss_function(word_output_probabilities, target_sentence)
+                    word_log_probabilities, _ , _= self.forward(sentence, None, lengths)
+                    _, perplexity = self.calculate_perplexity_of_sentence(word_log_probabilities, target_sentence)
+                    total_perplexity += perplexity
                 finally:
                     self.lstm.train()
-        return torch.exp(total_loss / len(data_loader))
+        return total_perplexity / len(data_loader)
+
+    def calculate_perplexity_of_sentence(self, word_log_probabilities, target_sentence) -> Tuple[Any, float]:
+        
+            word_log_probabilities = word_log_probabilities.transpose(1, 2)
+            
+            #TODO what to do if the sentence is short?
+
+            #TODO not sure if to keep the ignore index
+            loss = self.loss_function(word_log_probabilities, target_sentence, ignore_index=0)
+            return loss, torch.exp(loss)
 
     def train(self, train_loader, valid_loader, test_loader, num_epochs):
         # Epoch iterations
@@ -179,21 +189,12 @@ class LstmRegularized(nn.Module):
 
                 # shape: (batch_size, seq_len, vocab_size)
                 # transpose to (batch_size, vocab_size, seq_len)
-                word_log_probabilities = word_log_probabilities.transpose(1, 2)
                 
-                #TODO validate the loss calculation
-                #TODO the target sentence is array of vocab....
-                #TODO what to do if the sentence is short?
+                loss, perplexity =  self.calculate_perplexity_of_sentence(word_log_probabilities, target_sentence)
 
-                #TODO not sure if to keep the ignore index
-                loss = self.loss_function(word_log_probabilities, target_sentence, ignore_index=0)
                 if batch_number % 200 == 0:
                     #TODO graph should be in perplexity
-                    perplexity = torch.exp(loss)
                     print(f"Training perplexity for batch {batch_number} epoch {epoch} is {perplexity}")
-                    tb_x = epoch * len(train_loader) + batch_number + 1
-                    # self.writer.add_scalar("perplexity/train", self.calculate_perplexity(train_loader), tb_x)
-                    # self.writer.add_scalar("perplexity/test", self.calculate_perplexity(test_loader), tb_x)
                 loss.backward()
                 self.optimizer.step()
 
@@ -201,7 +202,9 @@ class LstmRegularized(nn.Module):
                 # We need to detach the hidden_states so the it wont be traersed by the backward
                 hidden_states = (hidden_states[0].detach(), hidden_states[1].detach())
 
-            # print(f"Epoch {epoch} is done, accuracy on validation set is: {self.calculate_perplexity(valid_loader)}") 
+            self.writer.add_scalar("perplexity/train", self.calculate_perplexity(train_loader), epoch)
+            self.writer.add_scalar("perplexity/test", self.calculate_perplexity(test_loader), epoch)
+            print(f"Epoch {epoch} is done, accuracy on validation set is: {self.calculate_perplexity(valid_loader)}") 
 
 def main():
     # The vocab is built from the training data
