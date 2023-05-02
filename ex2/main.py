@@ -8,12 +8,13 @@ from torch.utils.tensorboard import SummaryWriter
 # set device to GPU if available
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-#TODO amazing reference https://github.com/pytorch/examples/blob/e11e0796fc02cc2cd5b6ec2ad7cea21f77e25402/word_language_model/main.py#L104
 #TODO the model is unrolled 35 times
 #TODO (successive minibatches sequentially traverse the training set
 #TODO its parameters are initialized uniformly in [−0.05, 0.05]
 #TODO should add <eos> token to the end of each sentence?
 #TODO should I remove the <unk> token? and the , and .?
+
+# TODO PARAMETERS TO PLAY WITH - LEARNING RATE, EMBEDDING SIZE, HIDDEN SIZE 
 
 EMBEDDING_SIZE = 100
 # number of layers in the LSTM - as specified in the paper
@@ -24,6 +25,8 @@ HIDDEN_SIZE = 200
 INPUT_SIZE = 1
 # Size of the minibatch as specified in the paper
 BATCH_SIZE = 20
+
+# Change the learning rate and perhaps the optimazation method to match 
 LEARNING_RATE = 0.001
 NUM_EPOCHS = 20
 DROPOUT = 0.2
