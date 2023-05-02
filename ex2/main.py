@@ -50,6 +50,7 @@ def build_vocab(text_data: str):
     words = tokenize(text_data)
     counter = Counter()
     counter.update(words)
+    #TODO not sure - start from 1, 0 is reserved for padding - when I tried it it failed on some Error
     return {word: index for index, word in enumerate(counter.keys())}
 
 class PennTreeBankDataset(torch.utils.data.Dataset):
@@ -112,7 +113,8 @@ class LstmRegularized(nn.Module):
         self.embedding = torch.nn.Embedding(vocab_size, embedding_size)
         self.lstm = torch.nn.LSTM(embedding_size, hidden_size, num_layers, dropout=dropout, batch_first=True)
         self.linear = torch.nn.Linear(hidden_size, output_size)
-        self.logsoftmax = torch.nn.LogSoftmax(dim=1)
+        # Dim should be equal 2 because dim 2 is the words dimension!
+        self.logsoftmax = torch.nn.LogSoftmax(dim=2)
         self.loss_function = torch.nn.functional.nll_loss
         # Cast the LSTM weights and biases to long data type
         self.optimizer = torch.optim.SGD(self.parameters(), lr=LEARNING_RATE)
@@ -120,18 +122,21 @@ class LstmRegularized(nn.Module):
         self.writer = SummaryWriter(self.description)
 
     
-    def forward(self, input, hidden):
+    def forward(self, input, hidden, lengths):
         """
         The input is a long tensor of size (batch_size, seq_len) which contains the indices of the words in the sentence
         """
         #TODO init word2vec embedding
+
         embedding = self.embedding(input)
+        embedding = nn.utils.rnn.pack_padded_sequence(embedding, lengths, batch_first=True, enforce_sorted=False)
         output, hidden = self.lstm(embedding, hidden)
+        output, output_lengths = nn.utils.rnn.pad_packed_sequence(output, batch_first=True)
         output = self.linear(output)
         # Using the logsoftmax instead of softmax - like the paper
         # To get the probabilities of the words: torch.exp(output)
         output = self.logsoftmax(output)
-        return output, hidden
+        return output, hidden, output_lengths
     
     def calculate_perplexity(self, data_loader: DataLoader) -> float:
         #TODO consider removing this function?
@@ -140,7 +145,7 @@ class LstmRegularized(nn.Module):
         #TODO consider testing all the shiftings of the sentence
         total_loss = 0
         with torch.no_grad():
-            for sentence, target_sentence, _ in data_loader:
+            for sentence, target_sentence, lengths in data_loader:
                 try:
                     self.lstm.eval()
                     target_sentence = target_sentence.view(-1)
@@ -168,7 +173,7 @@ class LstmRegularized(nn.Module):
                     continue
                 self.optimizer.zero_grad()
 
-                word_log_probabilities, hidden_states = self.forward(sentence, hidden_states)
+                word_log_probabilities, hidden_states, output_length = self.forward(sentence, hidden_states, lengths)
 
                 #TODO use pack_padded_sequence to ignore the padding
 
@@ -179,11 +184,13 @@ class LstmRegularized(nn.Module):
                 #TODO validate the loss calculation
                 #TODO the target sentence is array of vocab....
                 #TODO what to do if the sentence is short?
-                loss = self.loss_function(word_log_probabilities, target_sentence)
+
+                #TODO not sure if to keep the ignore index
+                loss = self.loss_function(word_log_probabilities, target_sentence, ignore_index=0)
                 if batch_number % 200 == 0:
                     #TODO graph should be in perplexity
-                    
-                    print(f"Training perplexity for batch {batch_number} epoch {epoch} is {torch.exp(loss)}")
+                    perplexity = torch.exp(loss)
+                    print(f"Training perplexity for batch {batch_number} epoch {epoch} is {perplexity}")
                     tb_x = epoch * len(train_loader) + batch_number + 1
                     # self.writer.add_scalar("perplexity/train", self.calculate_perplexity(train_loader), tb_x)
                     # self.writer.add_scalar("perplexity/test", self.calculate_perplexity(test_loader), tb_x)
@@ -194,7 +201,7 @@ class LstmRegularized(nn.Module):
                 # We need to detach the hidden_states so the it wont be traersed by the backward
                 hidden_states = (hidden_states[0].detach(), hidden_states[1].detach())
 
-            print(f"Epoch {epoch} is done, accuracy on validation set is: {self.calculate_perplexity(valid_loader)}") 
+            # print(f"Epoch {epoch} is done, accuracy on validation set is: {self.calculate_perplexity(valid_loader)}") 
 
 def main():
     # The vocab is built from the training data
@@ -211,34 +218,3 @@ if __name__ == "__main__":
 
 
 
-
-
-# GOOD CODE 1
-# X = nn.utils.rnn.pack_padded_sequence(X, X_length_sorted)
-# X, self.hidden = self.gru(X, self.hidden)
-# X, output_lengths = nn.utils.rnn.pad_packed_sequence(X)
-
-# GOOD CODE
-
-# import torch.nn.utils.rnn as rnn_utils
-
-# # ...
-
-# # Pack the target sentences
-# packed_targets = rnn_utils.pack_padded_sequence(target_sentence, lengths, batch_first=True, enforce_sorted=False)
-
-# # Compute the word log probabilities
-# word_log_probabilities, hidden_states = self.forward(sentence, hidden_states)
-
-# # Transpose the word log probabilities to (batch_size, vocab_size, seq_len)
-# word_log_probabilities = word_log_probabilities.transpose(1, 2)
-
-# # Pack the word log probabilities using the same lengths as the targets
-# packed_word_log_probs = rnn_utils.pack_padded_sequence(word_log_probabilities, lengths, batch_first=True, enforce_sorted=False)
-
-# # Compute the NLL loss using the packed sequences
-# nll_loss = self.loss_function(packed_word_log_probs.data, packed_targets.data)
-
-# # Unpack the NLL loss and convert to perplexity
-# loss = rnn_utils.pad_packed_sequence(nll_loss, batch_first=True)[0].mean()
-# perplexity = torch.exp(loss)
