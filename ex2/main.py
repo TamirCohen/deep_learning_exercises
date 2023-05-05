@@ -5,6 +5,8 @@ from torch.utils.data import DataLoader
 from typing import List, Tuple, Any
 from torch.utils.tensorboard import SummaryWriter
 import itertools
+from pathlib import Path
+from torch.optim.lr_scheduler import StepLR
 
 # set device to GPU if available
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -27,10 +29,12 @@ HIDDEN_SIZE = 200
 BATCH_SIZE = 20
 
 # Change the learning rate and perhaps the optimazation method to match 
-LEARNING_RATE = 0.005
+LEARNING_RATE = 0.01
 NUM_EPOCHS = 20
 # Dropout From the paper: We apply dropout on non-recurrent connections of the LSTM
 DROPOUT = 0.5
+
+SAVED_MODELS_DIR = 'saved_models'
 
 def load_data():
     train_data = open('PTB/ptb.train.txt', 'r').read()
@@ -125,10 +129,11 @@ class RnnRegularized(nn.Module):
         self.logsoftmax = torch.nn.LogSoftmax(dim=2)
         self.loss_function = torch.nn.functional.nll_loss
         # Cast the LSTM weights and biases to long data type
-        self.optimizer = torch.optim.SGD(self.parameters(), lr=LEARNING_RATE)
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=LEARNING_RATE)
         self.description = f"{model}_Model_learning_{LEARNING_RATE}_dropout_{dropout}"
         self.writer = SummaryWriter(self.description)
-
+        # self.scheduler = StepLR(self.optimizer, step_size=5, gamma=0.1)
+        #TODO consider adding nn.Dropout - maybe the dropout in LSTM is not like the one in the paper
     
     def forward(self, input, hidden, lengths):
         """
@@ -216,13 +221,12 @@ def main():
     vocab = build_vocab(train_data)
     train_loader, valid_loader, test_loader = create_data_loaders(train_data, valid_data, test_data, BATCH_SIZE, vocab)
 
-    # models = ["lstm", "gru"]
-    # dropouts = [0, DROPOUT]
-    models = ["lstm"]
-    dropouts = [0]
+    models = ["lstm", "gru"]
+    dropouts = [0, DROPOUT]
     for model_name, dropout in itertools.product(models, dropouts):
         model = RnnRegularized(EMBEDDING_SIZE, len(vocab), HIDDEN_SIZE, len(vocab), NUM_LAYERS, dropout, BATCH_SIZE, model_name).to(device)
         model.train(train_loader, valid_loader, test_loader, NUM_EPOCHS)
+        torch.save(model,  Path(SAVED_MODELS_DIR) / Path(model.description + ".pt"))
 
 if __name__ == "__main__":
     main()
