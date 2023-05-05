@@ -4,6 +4,7 @@ from collections import Counter
 from torch.utils.data import DataLoader
 from typing import List, Tuple, Any
 from torch.utils.tensorboard import SummaryWriter
+import itertools
 
 # set device to GPU if available
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -16,20 +17,20 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # TODO PARAMETERS TO PLAY WITH - LEARNING RATE, EMBEDDING SIZE, HIDDEN SIZE 
 
-EMBEDDING_SIZE = 100
+# Chat GPT said thath 300 is a good embedding size
+EMBEDDING_SIZE = 300
 # number of layers in the LSTM - as specified in the paper
 NUM_LAYERS = 2
 # The size of the hidden state of the LSTM - as specified in the paper
 HIDDEN_SIZE = 200
-# not sure
-INPUT_SIZE = 1
 # Size of the minibatch as specified in the paper
 BATCH_SIZE = 20
 
 # Change the learning rate and perhaps the optimazation method to match 
-LEARNING_RATE = 0.001
+LEARNING_RATE = 0.005
 NUM_EPOCHS = 20
-DROPOUT = 0.2
+# Dropout From the paper: We apply dropout on non-recurrent connections of the LSTM
+DROPOUT = 0.5
 
 def load_data():
     train_data = open('PTB/ptb.train.txt', 'r').read()
@@ -103,9 +104,9 @@ def create_data_loaders(train_data: str, validation_data: str, test_data: str, b
     test_loader = DataLoader(PennTreeBankDataset(test_data, vocab), batch_size=batch_size, shuffle=False, collate_fn=pad_sentence_and_target)
     return train_loader, val_loader, test_loader
 
-class LstmRegularized(nn.Module):
-    def __init__(self, embedding_size, vocab_size, hidden_size, output_size, num_layers, dropout, batch_size):
-        super(LstmRegularized, self).__init__()
+class RnnRegularized(nn.Module):
+    def __init__(self, embedding_size, vocab_size, hidden_size, output_size, num_layers, dropout, batch_size, model):
+        super(RnnRegularized, self).__init__()
         self.embedding_size = embedding_size
         self.hidden_size = hidden_size
         self.output_size = output_size
@@ -114,14 +115,18 @@ class LstmRegularized(nn.Module):
         self.batch_size = batch_size
         self.vocab_size = vocab_size
         self.embedding = torch.nn.Embedding(vocab_size, embedding_size)
-        self.lstm = torch.nn.LSTM(embedding_size, hidden_size, num_layers, dropout=dropout, batch_first=True)
+        if model == "lstm":
+            self.rnn_cell = torch.nn.LSTM(embedding_size, hidden_size, num_layers, dropout=dropout, batch_first=True)
+        elif model == "gru":
+            self.rnn_cell = torch.nn.GRU(embedding_size, hidden_size, num_layers, dropout=dropout, batch_first=True)
+
         self.linear = torch.nn.Linear(hidden_size, output_size)
         # Dim should be equal 2 because dim 2 is the words dimension!
         self.logsoftmax = torch.nn.LogSoftmax(dim=2)
         self.loss_function = torch.nn.functional.nll_loss
         # Cast the LSTM weights and biases to long data type
         self.optimizer = torch.optim.SGD(self.parameters(), lr=LEARNING_RATE)
-        self.description = f"Lstm_Model_learning_{LEARNING_RATE}_dropout_{dropout}"
+        self.description = f"{model}_Model_learning_{LEARNING_RATE}_dropout_{dropout}"
         self.writer = SummaryWriter(self.description)
 
     
@@ -133,7 +138,7 @@ class LstmRegularized(nn.Module):
 
         embedding = self.embedding(input)
         embedding = nn.utils.rnn.pack_padded_sequence(embedding, lengths, batch_first=True, enforce_sorted=False)
-        output, hidden = self.lstm(embedding, hidden)
+        output, hidden = self.rnn_cell(embedding, hidden)
         output, output_lengths = nn.utils.rnn.pad_packed_sequence(output, batch_first=True)
         output = self.linear(output)
         # Using the logsoftmax instead of softmax - like the paper
@@ -142,21 +147,14 @@ class LstmRegularized(nn.Module):
         return output, hidden, output_lengths
     
     def calculate_perplexity(self, data_loader: DataLoader) -> float:
-        #TODO consider removing this function?
-        correct = 0
-        total = 0
-        #TODO consider testing all the shiftings of the sentence
-        total_loss = 0
         total_perplexity = 0
+        self.rnn_cell.eval()
         with torch.no_grad():
             for sentence, target_sentence, lengths in data_loader:
-                try:
-                    self.lstm.eval()
-                    word_log_probabilities, _ , _= self.forward(sentence, None, lengths)
-                    _, perplexity = self.calculate_perplexity_of_sentence(word_log_probabilities, target_sentence)
-                    total_perplexity += perplexity
-                finally:
-                    self.lstm.train()
+                word_log_probabilities, _ , _= self.forward(sentence, None, lengths)
+                _, perplexity = self.calculate_perplexity_of_sentence(word_log_probabilities, target_sentence)
+                total_perplexity += perplexity
+        self.rnn_cell.train()
         return total_perplexity / len(data_loader)
 
     def calculate_perplexity_of_sentence(self, word_log_probabilities, target_sentence) -> Tuple[Any, float]:
@@ -205,9 +203,11 @@ class LstmRegularized(nn.Module):
                 # We need to detach the hidden_states so the it wont be traersed by the backward
                 hidden_states = (hidden_states[0].detach(), hidden_states[1].detach())
 
-            self.writer.add_scalar("perplexity/train", self.calculate_perplexity(train_loader), epoch)
-            self.writer.add_scalar("perplexity/test", self.calculate_perplexity(test_loader), epoch)
-            print(f"Epoch {epoch} is done, accuracy on validation set is: {self.calculate_perplexity(valid_loader)}") 
+            test_perplexity = self.calculate_perplexity(test_loader)
+            train_perplexity = self.calculate_perplexity(train_loader)
+            self.writer.add_scalars("perplexity", {"train": train_perplexity, "test": test_perplexity}, epoch)
+            
+            print(f"Epoch {epoch} is done, perplexity on test set is: {test_perplexity}") 
 
 def main():
     # The vocab is built from the training data
@@ -215,9 +215,14 @@ def main():
     train_data, valid_data, test_data = load_data()
     vocab = build_vocab(train_data)
     train_loader, valid_loader, test_loader = create_data_loaders(train_data, valid_data, test_data, BATCH_SIZE, vocab)
-    lstm_model = LstmRegularized(EMBEDDING_SIZE, len(vocab), HIDDEN_SIZE, len(vocab), NUM_LAYERS, DROPOUT, BATCH_SIZE)
-    lstm_model.to(device)
-    lstm_model.train(train_loader, valid_loader, test_loader, NUM_EPOCHS)
+
+    # models = ["lstm", "gru"]
+    # dropouts = [0, DROPOUT]
+    models = ["lstm"]
+    dropouts = [0]
+    for model_name, dropout in itertools.product(models, dropouts):
+        model = RnnRegularized(EMBEDDING_SIZE, len(vocab), HIDDEN_SIZE, len(vocab), NUM_LAYERS, dropout, BATCH_SIZE, model_name).to(device)
+        model.train(train_loader, valid_loader, test_loader, NUM_EPOCHS)
 
 if __name__ == "__main__":
     main()
