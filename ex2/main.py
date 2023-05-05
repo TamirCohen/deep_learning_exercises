@@ -10,11 +10,10 @@ from torch.optim.lr_scheduler import StepLR
 
 # set device to GPU if available
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+#TODO rename word_log_probs to output
 #TODO the model is unrolled 35 times
 #TODO (successive minibatches sequentially traverse the training set
 #TODO its parameters are initialized uniformly in [−0.05, 0.05]
-#TODO should add <eos> token to the end of each sentence?
 #TODO should I remove the <unk> token? and the , and .?
 
 # TODO PARAMETERS TO PLAY WITH - LEARNING RATE, EMBEDDING SIZE, HIDDEN SIZE 
@@ -29,10 +28,16 @@ HIDDEN_SIZE = 200
 BATCH_SIZE = 20
 
 # Change the learning rate and perhaps the optimazation method to match 
-LEARNING_RATE = 0.01
+LEARNING_RATE = 0.005
 NUM_EPOCHS = 20
 # Dropout From the paper: We apply dropout on non-recurrent connections of the LSTM
 DROPOUT = 0.5
+
+# Not sure about this one
+SEQUENCE_lENGTH = 35
+
+# Like in the paper
+CLIP_GRADIENT_VALUE = 5
 
 SAVED_MODELS_DIR = 'saved_models'
 
@@ -40,9 +45,17 @@ def load_data():
     train_data = open('PTB/ptb.train.txt', 'r').read()
     valid_data = open('PTB/ptb.valid.txt', 'r').read()
     test_data = open('PTB/ptb.test.txt', 'r').read()
-    return train_data, valid_data, test_data 
+    return preprocess_data(train_data), preprocess_data(valid_data), preprocess_data(test_data) 
 
 # define tokenizer and build vocabulary
+
+def preprocess_data(text_data: str):
+    """ Remove newlines and replace them with <eos> token """
+    # Not sure if I should do this
+    text_data = text_data.lower()
+    text_data = text_data.replace('\r\n', '<eos>')
+    text_data = text_data.replace('\n', '<eos>')
+    return text_data
 
 def tokenize(text_data: str):
     """
@@ -59,33 +72,35 @@ def build_vocab(text_data: str):
     counter = Counter()
     counter.update(words)
     #TODO not sure - start from 1, 0 is reserved for padding - when I tried it it failed on some Error
+    print("The total number of words is {}".format(len(words)))
+    print("found {} unique tokens in training data".format(len(counter)))
+    print(f"The 30 most common words are {counter.most_common(30)}")
+    
     return {word: index for index, word in enumerate(counter.keys())}
 
 class PennTreeBankDataset(torch.utils.data.Dataset):
-    def __init__(self, raw_data: str, vocab: dict):
+    def __init__(self, raw_data: str, vocab: dict, seq_length: int):
         self.raw_data = raw_data
         self.vocab = vocab
-        self.sentences = self.raw_data.splitlines()
-        
+        self.encoded_text = self.text_to_vocab(raw_data, vocab)
+        self.seq_length = seq_length
+    
+    def text_to_vocab(self, text: str, vocab: dict):
+        """
+        Convert the data to a vector of indices
+        """
+        return [vocab[word] for word in tokenize(text)]
+
     def __getitem__(self, index):
         """
         get the sentence at the index, then shift it by one word to the right to get the target sentence
         """
-        sentence_vocab = self.sentence_to_vocab(tokenize(self.sentences[index]), self.vocab)
-        sentence_tensor = torch.tensor(sentence_vocab, dtype=torch.long, device=device)
-        # shift sentence by one word
-        target_vocab = sentence_vocab[1:] + [0]
-        target_tensor = torch.tensor(target_vocab, dtype=torch.long, device=device)
-        return sentence_tensor, target_tensor
+        return torch.tensor(self.encoded_text[index:index+self.seq_length] ,dtype=torch.long, device=device), \
+            torch.tensor(self.encoded_text[index+1:index+self.seq_length+1] ,dtype=torch.long, device=device)
         
     def __len__(self):
-        return len(self.sentences)
+        return len(self.encoded_text) - self.seq_length + 1
 
-    def sentence_to_vocab(self, words: str, vocab: dict):
-        """
-        Convert the data to a vector of indices
-        """
-        return [vocab[word] for word in words]
 
 def pad_sentence_and_target(batch: List[Tuple[torch.Tensor, torch.Tensor]]):
     """
@@ -103,9 +118,9 @@ def pad_sentence_and_target(batch: List[Tuple[torch.Tensor, torch.Tensor]]):
     return padded_sentences, padded_targets, lengths
 
 def create_data_loaders(train_data: str, validation_data: str, test_data: str, batch_size: int, vocab: dict):
-    train_loader = DataLoader(PennTreeBankDataset(train_data, vocab), batch_size=batch_size, shuffle=True, collate_fn=pad_sentence_and_target)
-    val_loader = DataLoader(PennTreeBankDataset(validation_data, vocab), batch_size=batch_size, shuffle=False, collate_fn=pad_sentence_and_target)
-    test_loader = DataLoader(PennTreeBankDataset(test_data, vocab), batch_size=batch_size, shuffle=False, collate_fn=pad_sentence_and_target)
+    train_loader = DataLoader(PennTreeBankDataset(train_data, vocab, SEQUENCE_lENGTH), batch_size=batch_size, shuffle=True, collate_fn=pad_sentence_and_target)
+    val_loader = DataLoader(PennTreeBankDataset(validation_data, vocab, SEQUENCE_lENGTH), batch_size=batch_size, shuffle=False, collate_fn=pad_sentence_and_target)
+    test_loader = DataLoader(PennTreeBankDataset(test_data, vocab, SEQUENCE_lENGTH), batch_size=batch_size, shuffle=False, collate_fn=pad_sentence_and_target)
     return train_loader, val_loader, test_loader
 
 class RnnRegularized(nn.Module):
@@ -126,8 +141,7 @@ class RnnRegularized(nn.Module):
 
         self.linear = torch.nn.Linear(hidden_size, output_size)
         # Dim should be equal 2 because dim 2 is the words dimension!
-        self.logsoftmax = torch.nn.LogSoftmax(dim=2)
-        self.loss_function = torch.nn.functional.nll_loss
+        self.loss_function = nn.CrossEntropyLoss()
         # Cast the LSTM weights and biases to long data type
         self.optimizer = torch.optim.Adam(self.parameters(), lr=LEARNING_RATE)
         self.description = f"{model}_Model_learning_{LEARNING_RATE}_dropout_{dropout}"
@@ -146,9 +160,6 @@ class RnnRegularized(nn.Module):
         output, hidden = self.rnn_cell(embedding, hidden)
         output, output_lengths = nn.utils.rnn.pad_packed_sequence(output, batch_first=True)
         output = self.linear(output)
-        # Using the logsoftmax instead of softmax - like the paper
-        # To get the probabilities of the words: torch.exp(output)
-        output = self.logsoftmax(output)
         return output, hidden, output_lengths
     
     def calculate_perplexity(self, data_loader: DataLoader) -> float:
@@ -164,13 +175,10 @@ class RnnRegularized(nn.Module):
 
     def calculate_perplexity_of_sentence(self, word_log_probabilities, target_sentence) -> Tuple[Any, float]:
         
-            word_log_probabilities = word_log_probabilities.transpose(1, 2)
-            
-            #TODO what to do if the sentence is short?
-
-            #TODO not sure if to keep the ignore index
-            loss = self.loss_function(word_log_probabilities, target_sentence, ignore_index=0)
-            return loss, torch.exp(loss)
+        word_log_probabilities = word_log_probabilities.transpose(1, 2)
+        
+        loss = self.loss_function(word_log_probabilities, target_sentence)
+        return loss, torch.exp(loss)
 
     def train(self, train_loader, valid_loader, test_loader, num_epochs):
         # Epoch iterations
@@ -178,6 +186,7 @@ class RnnRegularized(nn.Module):
             # Initialize hidden state
             hidden_states = None
             # Batch iterations
+            print(f"Starting to Traing Epoch: {epoch} for {len(train_loader)} batches")
             for batch_number, (sentence, target_sentence, lengths) in enumerate(train_loader):
                 # Added the dimensiton of the word embedding (Which is one in this case)
                 # Transpose so it will contain the correct dimensions for the LSTM
@@ -197,11 +206,11 @@ class RnnRegularized(nn.Module):
                 # transpose to (batch_size, vocab_size, seq_len)
                 
                 loss, perplexity =  self.calculate_perplexity_of_sentence(word_log_probabilities, target_sentence)
-
                 if batch_number % 200 == 0:
                     #TODO graph should be in perplexity
                     print(f"Training perplexity for batch {batch_number} epoch {epoch} is {perplexity}")
                 loss.backward()
+                nn.utils.clip_grad_value_(self.parameters(), clip_value=CLIP_GRADIENT_VALUE)
                 self.optimizer.step()
 
                 # Using the hidden states of the last batch as the intializor
@@ -212,7 +221,7 @@ class RnnRegularized(nn.Module):
             train_perplexity = self.calculate_perplexity(train_loader)
             self.writer.add_scalars("perplexity", {"train": train_perplexity, "test": test_perplexity}, epoch)
             
-            print(f"Epoch {epoch} is done, perplexity on test set is: {test_perplexity}") 
+            print(f"Epoch {epoch} is done, perplexity on test set is: {test_perplexity}, perplexity on train set is: {train_perplexity}") 
 
 def main():
     # The vocab is built from the training data
