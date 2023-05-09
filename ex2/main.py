@@ -29,17 +29,20 @@ BATCH_SIZE = 20
 
 # Change the learning rate and perhaps the optimazation method to match 
 LEARNING_RATE = 0.005
-NUM_EPOCHS = 20
+NUM_EPOCHS = 2
 # Dropout From the paper: We apply dropout on non-recurrent connections of the LSTM
 DROPOUT = 0.5
 
 # Not sure about this one
-SEQUENCE_lENGTH = 35
+SEQUENCE_LENGTH = 35
 
 # Like in the paper
 CLIP_GRADIENT_VALUE = 5
 
 SAVED_MODELS_DIR = 'saved_models'
+
+LOG_BATCH_INTERVAL = 600
+NUMBER_OF_BATCHES_FOR_LOSS = 1000
 
 def load_data():
     train_data = open('PTB/ptb.train.txt', 'r').read()
@@ -118,9 +121,9 @@ def pad_sentence_and_target(batch: List[Tuple[torch.Tensor, torch.Tensor]]):
     return padded_sentences, padded_targets, lengths
 
 def create_data_loaders(train_data: str, validation_data: str, test_data: str, batch_size: int, vocab: dict):
-    train_loader = DataLoader(PennTreeBankDataset(train_data, vocab, SEQUENCE_lENGTH), batch_size=batch_size, shuffle=True, collate_fn=pad_sentence_and_target)
-    val_loader = DataLoader(PennTreeBankDataset(validation_data, vocab, SEQUENCE_lENGTH), batch_size=batch_size, shuffle=False, collate_fn=pad_sentence_and_target)
-    test_loader = DataLoader(PennTreeBankDataset(test_data, vocab, SEQUENCE_lENGTH), batch_size=batch_size, shuffle=False, collate_fn=pad_sentence_and_target)
+    train_loader = DataLoader(PennTreeBankDataset(train_data, vocab, SEQUENCE_LENGTH), batch_size=batch_size, shuffle=True, collate_fn=pad_sentence_and_target)
+    val_loader = DataLoader(PennTreeBankDataset(validation_data, vocab, SEQUENCE_LENGTH), batch_size=batch_size, shuffle=True, collate_fn=pad_sentence_and_target)
+    test_loader = DataLoader(PennTreeBankDataset(test_data, vocab, SEQUENCE_LENGTH), batch_size=batch_size, shuffle=True, collate_fn=pad_sentence_and_target)
     return train_loader, val_loader, test_loader
 
 class RnnRegularized(nn.Module):
@@ -165,13 +168,16 @@ class RnnRegularized(nn.Module):
     def calculate_perplexity(self, data_loader: DataLoader) -> float:
         total_perplexity = 0
         self.rnn_cell.eval()
+        # Sampling batches to calculate the perplexity faster
         with torch.no_grad():
-            for sentence, target_sentence, lengths in data_loader:
+            for i, (sentence, target_sentence, lengths) in enumerate(data_loader):
                 word_log_probabilities, _ , _= self.forward(sentence, None, lengths)
                 _, perplexity = self.calculate_perplexity_of_sentence(word_log_probabilities, target_sentence)
                 total_perplexity += perplexity
+                if i == NUMBER_OF_BATCHES_FOR_LOSS:
+                    break
         self.rnn_cell.train()
-        return total_perplexity / len(data_loader)
+        return total_perplexity / NUMBER_OF_BATCHES_FOR_LOSS
 
     def calculate_perplexity_of_sentence(self, word_log_probabilities, target_sentence) -> Tuple[Any, float]:
         
@@ -206,9 +212,12 @@ class RnnRegularized(nn.Module):
                 # transpose to (batch_size, vocab_size, seq_len)
                 
                 loss, perplexity =  self.calculate_perplexity_of_sentence(word_log_probabilities, target_sentence)
-                if batch_number % 200 == 0:
-                    #TODO graph should be in perplexity
-                    print(f"Training perplexity for batch {batch_number} epoch {epoch} is {perplexity}")
+                if batch_number % LOG_BATCH_INTERVAL == 0:
+                    test_perplexity = self.calculate_perplexity(test_loader)
+                    train_perplexity = self.calculate_perplexity(train_loader)
+                    print("<LOGGING> Train perplexity {}, test perplexity {}, batch number {}".format(train_perplexity, test_perplexity, batch_number))
+                    self.writer.add_scalars("perplexity", {"train": train_perplexity, "test": test_perplexity}, epoch * len(train_loader) + batch_number)
+
                 loss.backward()
                 nn.utils.clip_grad_value_(self.parameters(), clip_value=CLIP_GRADIENT_VALUE)
                 self.optimizer.step()
@@ -217,10 +226,6 @@ class RnnRegularized(nn.Module):
                 # We need to detach the hidden_states so the it wont be traersed by the backward
                 hidden_states = (hidden_states[0].detach(), hidden_states[1].detach())
 
-            test_perplexity = self.calculate_perplexity(test_loader)
-            train_perplexity = self.calculate_perplexity(train_loader)
-            self.writer.add_scalars("perplexity", {"train": train_perplexity, "test": test_perplexity}, epoch)
-            
             print(f"Epoch {epoch} is done, perplexity on test set is: {test_perplexity}, perplexity on train set is: {train_perplexity}") 
 
 def main():
