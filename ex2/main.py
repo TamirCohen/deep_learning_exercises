@@ -239,8 +239,14 @@ def main():
     dropouts = [0, DROPOUT]
     for model_name, dropout in itertools.product(models, dropouts):
         model = RnnRegularized(EMBEDDING_SIZE, len(vocab), HIDDEN_SIZE, len(vocab), NUM_LAYERS, dropout, BATCH_SIZE, model_name).to(device)
-        model.train(train_loader, valid_loader, test_loader, NUM_EPOCHS)
-        torch.save(model,  Path(SAVED_MODELS_DIR) / Path(model.description + ".pt"))
+        try:
+            print(f"Starting to train model {model.description}")
+            print(f"press ctrl+c to stop training and save the model")
+            model.train(train_loader, valid_loader, test_loader, NUM_EPOCHS)
+            torch.save(model,  Path(SAVED_MODELS_DIR) / Path(model.description + ".pt"))
+        except KeyboardInterrupt:
+            print("Keyboard interrupt detected, saving model and continuing to next model")
+            torch.save(model,  Path(SAVED_MODELS_DIR) / Path(model.description + ".pt"))
 
 if __name__ == "__main__":
     main()
