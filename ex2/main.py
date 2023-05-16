@@ -206,7 +206,6 @@ class RnnRegularized(nn.Module):
                 if sentence.shape[0] != self.batch_size:
                     continue
                 self.optimizer.zero_grad()
-
                 word_log_probabilities, hidden_states, output_length = self.forward(sentence, hidden_states, lengths)
 
                 #TODO use pack_padded_sequence to ignore the padding
@@ -218,7 +217,8 @@ class RnnRegularized(nn.Module):
                 if batch_number % LOG_BATCH_INTERVAL == 0:
                     test_perplexity = self.calculate_perplexity(test_loader)
                     train_perplexity = self.calculate_perplexity(train_loader)
-                    print("<LOGGING> Train perplexity {}, test perplexity {}, batch number {}".format(train_perplexity, test_perplexity, batch_number))
+                    valid_perplexity = self.calculate_perplexity(valid_loader)
+                    print("<LOGGING> Train perplexity {}, test perplexity {}, valid perplexity {}, batch number {}".format(train_perplexity, test_perplexity, valid_perplexity, batch_number))
                     self.writer.add_scalars("perplexity", {"train": train_perplexity, "test": test_perplexity}, epoch * len(train_loader) + batch_number)
                     if test_perplexity < prev_perplexity:
                         print("Saving model state because test perplexity is lower than previous one")
@@ -234,7 +234,11 @@ class RnnRegularized(nn.Module):
 
                 # Using the hidden states of the last batch as the intializor
                 # We need to detach the hidden_states so the it wont be traersed by the backward
-                hidden_states = (hidden_states[0].detach(), hidden_states[1].detach())
+                # Difference between GRU and LSTM
+                if type(hidden_states) == tuple:
+                    hidden_states = (hidden_states[0].detach(), hidden_states[1].detach())
+                else:
+                    hidden_states = hidden_states.detach()
 
             print(f"Epoch {epoch} is done, perplexity on test set is: {test_perplexity}, perplexity on train set is: {train_perplexity}") 
 
@@ -245,7 +249,7 @@ def main():
     vocab = build_vocab(train_data)
     train_loader, valid_loader, test_loader = create_data_loaders(train_data, valid_data, test_data, BATCH_SIZE, vocab)
 
-    models = ["lstm", "gru"]
+    models = ["gru", "lstm"]
     dropouts = [0, DROPOUT]
     for model_name, dropout in itertools.product(models, dropouts):
         model = RnnRegularized(EMBEDDING_SIZE, len(vocab), HIDDEN_SIZE, len(vocab), NUM_LAYERS, dropout, BATCH_SIZE, model_name).to(device)
