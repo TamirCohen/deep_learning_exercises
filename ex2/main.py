@@ -170,9 +170,10 @@ class RnnRegularized(nn.Module):
         total_perplexity = 0
         self.rnn_cell.eval()
         # Sampling batches to calculate the perplexity faster
+        hidden = None
         with torch.no_grad():
             for i, (sentence, target_sentence, lengths) in enumerate(data_loader):
-                word_log_probabilities, _ , _= self.forward(sentence, None, lengths)
+                word_log_probabilities, hidden , _= self.forward(sentence, hidden, lengths)
                 _, perplexity = self.calculate_perplexity_of_sentence(word_log_probabilities, target_sentence)
                 total_perplexity += perplexity
                 if i == NUMBER_OF_BATCHES_FOR_LOSS:
