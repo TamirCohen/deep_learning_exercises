@@ -30,6 +30,7 @@ BATCH_SIZE = 20
 # Change the learning rate and perhaps the optimazation method to match 
 LEARNING_RATE = 0.005
 NUM_EPOCHS = 2
+NUM_BATCHES = 10000
 # Dropout From the paper: We apply dropout on non-recurrent connections of the LSTM
 DROPOUT = 0.5
 
@@ -188,6 +189,7 @@ class RnnRegularized(nn.Module):
 
     def train(self, train_loader, valid_loader, test_loader, num_epochs):
         # Epoch iterations
+        prev_perplexity = float("inf")
         for epoch in range(num_epochs):
             # Initialize hidden state
             hidden_states = None
@@ -217,7 +219,15 @@ class RnnRegularized(nn.Module):
                     train_perplexity = self.calculate_perplexity(train_loader)
                     print("<LOGGING> Train perplexity {}, test perplexity {}, batch number {}".format(train_perplexity, test_perplexity, batch_number))
                     self.writer.add_scalars("perplexity", {"train": train_perplexity, "test": test_perplexity}, epoch * len(train_loader) + batch_number)
-
+                    if test_perplexity < prev_perplexity:
+                        print("Saving model state because test perplexity is lower than previous one")
+                        torch.save(self.state_dict(),  Path(SAVED_MODELS_DIR) / Path(self.description + ".pth"))
+                        prev_perplexity = test_perplexity
+                        return
+                
+                if batch_number >= NUM_BATCHES:
+                    print("Finished training")
+                    break
                 loss.backward()
                 nn.utils.clip_grad_value_(self.parameters(), clip_value=CLIP_GRADIENT_VALUE)
                 self.optimizer.step()
@@ -239,14 +249,8 @@ def main():
     dropouts = [0, DROPOUT]
     for model_name, dropout in itertools.product(models, dropouts):
         model = RnnRegularized(EMBEDDING_SIZE, len(vocab), HIDDEN_SIZE, len(vocab), NUM_LAYERS, dropout, BATCH_SIZE, model_name).to(device)
-        try:
-            print(f"Starting to train model {model.description}")
-            print(f"press ctrl+c to stop training and save the model")
-            model.train(train_loader, valid_loader, test_loader, NUM_EPOCHS)
-            torch.save(model,  Path(SAVED_MODELS_DIR) / Path(model.description + ".pt"))
-        except KeyboardInterrupt:
-            print("Keyboard interrupt detected, saving model and continuing to next model")
-            torch.save(model,  Path(SAVED_MODELS_DIR) / Path(model.description + ".pt"))
+        print(f"Starting to train model {model.description}")
+        model.train(train_loader, valid_loader, test_loader, NUM_EPOCHS)
 
 if __name__ == "__main__":
     main()
