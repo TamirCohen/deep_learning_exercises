@@ -223,7 +223,6 @@ class RnnRegularized(nn.Module):
                         print("Saving model state because test perplexity is lower than previous one")
                         torch.save(self.state_dict(),  Path(self.description + ".pth"))
                         prev_perplexity = test_perplexity
-                        return
                 
                 if batch_number >= NUM_BATCHES:
                     print("Finished training")
