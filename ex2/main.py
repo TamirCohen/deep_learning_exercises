@@ -221,7 +221,7 @@ class RnnRegularized(nn.Module):
                     self.writer.add_scalars("perplexity", {"train": train_perplexity, "test": test_perplexity}, epoch * len(train_loader) + batch_number)
                     if test_perplexity < prev_perplexity:
                         print("Saving model state because test perplexity is lower than previous one")
-                        torch.save(self.state_dict(),  Path(SAVED_MODELS_DIR) / Path(self.description + ".pth"))
+                        torch.save(self.state_dict(),  Path(self.description + ".pth"))
                         prev_perplexity = test_perplexity
                         return
                 
