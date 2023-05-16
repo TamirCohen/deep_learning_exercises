@@ -226,7 +226,7 @@ class RnnRegularized(nn.Module):
                 
                 if batch_number >= NUM_BATCHES:
                     print("Finished training")
-                    break
+                    return
                 loss.backward()
                 nn.utils.clip_grad_value_(self.parameters(), clip_value=CLIP_GRADIENT_VALUE)
                 self.optimizer.step()
