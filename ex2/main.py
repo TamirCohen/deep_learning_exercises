@@ -249,7 +249,7 @@ def main():
     vocab = build_vocab(train_data)
     train_loader, valid_loader, test_loader = create_data_loaders(train_data, valid_data, test_data, BATCH_SIZE, vocab)
 
-    models = ["gru", "lstm"]
+    models = ["lstm","gru"]
     dropouts = [0, DROPOUT]
     for model_name, dropout in itertools.product(models, dropouts):
         model = RnnRegularized(EMBEDDING_SIZE, len(vocab), HIDDEN_SIZE, len(vocab), NUM_LAYERS, dropout, BATCH_SIZE, model_name).to(device)
