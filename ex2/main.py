@@ -99,11 +99,11 @@ class PennTreeBankDataset(torch.utils.data.Dataset):
         """
         get the sentence at the index, then shift it by one word to the right to get the target sentence
         """
-        return torch.tensor(self.encoded_text[index:index+self.seq_length] ,dtype=torch.long, device=device), \
-            torch.tensor(self.encoded_text[index+1:index+self.seq_length+1] ,dtype=torch.long, device=device)
+        return torch.tensor(self.encoded_text[index*self.seq_length:index*self.seq_length+self.seq_length] ,dtype=torch.long, device=device), \
+            torch.tensor(self.encoded_text[index*self.seq_length+1:index*self.seq_length+self.seq_length+1] ,dtype=torch.long, device=device)
         
     def __len__(self):
-        return len(self.encoded_text) - self.seq_length + 1
+        return (int)(len(self.encoded_text/self.seq_length)) -1
 
 
 def pad_sentence_and_target(batch: List[Tuple[torch.Tensor, torch.Tensor]]):
