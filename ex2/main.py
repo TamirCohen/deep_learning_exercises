@@ -103,7 +103,7 @@ class PennTreeBankDataset(torch.utils.data.Dataset):
             torch.tensor(self.encoded_text[index*self.seq_length+1:index*self.seq_length+self.seq_length+1] ,dtype=torch.long, device=device)
         
     def __len__(self):
-        return (int)(len(self.encoded_text/self.seq_length)) -1
+        return (int)(len(self.encoded_text)/self.seq_length) -1
 
 
 def pad_sentence_and_target(batch: List[Tuple[torch.Tensor, torch.Tensor]]):
