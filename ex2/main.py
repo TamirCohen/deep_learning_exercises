@@ -28,7 +28,7 @@ HIDDEN_SIZE = 200
 BATCH_SIZE = 20
 
 # Change the learning rate and perhaps the optimazation method to match 
-LEARNING_RATE = 1
+LEARNING_RATE = 0.01
 NUM_EPOCHS = 2
 NUM_BATCHES = 10000
 # Dropout From the paper: We apply dropout on non-recurrent connections of the LSTM
