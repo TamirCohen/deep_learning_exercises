@@ -145,7 +145,7 @@ class RnnRegularized(nn.Module):
 
         self.linear = torch.nn.Linear(hidden_size, output_size)
         # Dim should be equal 2 because dim 2 is the words dimension!
-        self.loss_function = nn.ClassNLLCriterion(dim=2)
+        self.loss_function = nn.NLLLoss2d()
         # Cast the LSTM weights and biases to long data type
         self.optimizer = torch.optim.Adam(self.parameters(), lr=LEARNING_RATE)
         self.description = f"{model}_Model_learning_{LEARNING_RATE}_dropout_{dropout}"
