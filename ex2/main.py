@@ -28,14 +28,14 @@ HIDDEN_SIZE = 200
 BATCH_SIZE = 20
 
 # Change the learning rate and perhaps the optimazation method to match 
-LEARNING_RATE = 0.005
+LEARNING_RATE = 1
 NUM_EPOCHS = 2
 NUM_BATCHES = 10000
 # Dropout From the paper: We apply dropout on non-recurrent connections of the LSTM
 DROPOUT = 0.5
 
 # Not sure about this one
-SEQUENCE_LENGTH = 35
+SEQUENCE_LENGTH = 20
 
 # Like in the paper
 CLIP_GRADIENT_VALUE = 5
@@ -145,7 +145,7 @@ class RnnRegularized(nn.Module):
 
         self.linear = torch.nn.Linear(hidden_size, output_size)
         # Dim should be equal 2 because dim 2 is the words dimension!
-        self.loss_function = nn.CrossEntropyLoss()
+        self.loss_function = nn.ClassNLLCriterion(dim=2)
         # Cast the LSTM weights and biases to long data type
         self.optimizer = torch.optim.Adam(self.parameters(), lr=LEARNING_RATE)
         self.description = f"{model}_Model_learning_{LEARNING_RATE}_dropout_{dropout}"
