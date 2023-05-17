@@ -35,7 +35,7 @@ NUM_BATCHES = 10000
 DROPOUT = 0.5
 
 # Not sure about this one
-SEQUENCE_LENGTH = 20
+SEQUENCE_LENGTH = 35
 
 # Like in the paper
 CLIP_GRADIENT_VALUE = 5
@@ -220,10 +220,10 @@ class RnnRegularized(nn.Module):
                     valid_perplexity = self.calculate_perplexity(valid_loader)
                     print("<LOGGING> Train perplexity {}, test perplexity {}, valid perplexity {}, batch number {}".format(train_perplexity, test_perplexity, valid_perplexity, batch_number))
                     self.writer.add_scalars("perplexity", {"train": train_perplexity, "test": test_perplexity}, epoch * len(train_loader) + batch_number)
-                    if test_perplexity < prev_perplexity:
+                    if train_perplexity < prev_perplexity:
                         print("Saving model state because test perplexity is lower than previous one")
                         torch.save(self.state_dict(),  Path(self.description + ".pth"))
-                        prev_perplexity = test_perplexity
+                        prev_perplexity = train_perplexity
                 
                 if batch_number >= NUM_BATCHES:
                     print("Finished training")
