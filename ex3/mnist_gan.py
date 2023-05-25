@@ -39,12 +39,12 @@ class Discriminator(nn.Module):
         self.module = nn.Sequential(
             nn.Conv2d(1, MODEL_DIMENSION, kernel_size=KERNEL_SIZE, stride=STRIDE),
             nn.LeakyReLU(LEAKY_SLOPE),
-            nn.Conv2d(MODEL_DIMENSION, MODEL_DIMENSION, kernel_size=KERNEL_SIZE, stride=STRIDE),
+            nn.Conv2d(MODEL_DIMENSION, 2 * MODEL_DIMENSION, kernel_size=KERNEL_SIZE, stride=STRIDE),
             nn.LeakyReLU(LEAKY_SLOPE),
-            nn.Conv2d(MODEL_DIMENSION, MODEL_DIMENSION, kernel_size=KERNEL_SIZE, stride=STRIDE),
+            nn.Conv2d(2 * MODEL_DIMENSION, 4 * MODEL_DIMENSION, kernel_size=KERNEL_SIZE, stride=STRIDE),
             nn.LeakyReLU(LEAKY_SLOPE),
             nn.Flatten(),
-            nn.Linear(MODEL_DIMENSION, 1)
+            nn.Linear(4 * MODEL_DIMENSION, 1)
         )
         self.model_type = model_type
     
@@ -70,18 +70,18 @@ class Generator(nn.Module):
 
         # Using 3 instead of 4 because I want to get to 24 and than to 28
         self.upsample_noise = nn.Sequential(
-            nn.Linear(NOISE_SIZE, 3 * 3 * MODEL_DIMENSION),
-            nn.BatchNorm1d(3 * 3 * MODEL_DIMENSION),
+            nn.Linear(NOISE_SIZE, 3 * 3 * 4 * MODEL_DIMENSION),
+            nn.BatchNorm1d(3 * 3 * 4 * MODEL_DIMENSION),
             nn.ReLU(),
         )
 
         self.dconv_upsample = nn.Sequential(
-            nn.ConvTranspose2d(MODEL_DIMENSION, MODEL_DIMENSION, kernel_size=KERNEL_SIZE, stride=STRIDE, padding=1),
-            nn.BatchNorm2d(MODEL_DIMENSION),
+            nn.ConvTranspose2d(4 * MODEL_DIMENSION, 2 * MODEL_DIMENSION, kernel_size=KERNEL_SIZE, stride=STRIDE, padding=1),
+            nn.BatchNorm2d(2 * MODEL_DIMENSION),
             nn.ReLU()
         )
         self.dconv_upsample2 = nn.Sequential(
-            nn.ConvTranspose2d(MODEL_DIMENSION, MODEL_DIMENSION, kernel_size=KERNEL_SIZE, stride=STRIDE),
+            nn.ConvTranspose2d(2 * MODEL_DIMENSION, MODEL_DIMENSION, kernel_size=KERNEL_SIZE, stride=STRIDE),
             nn.BatchNorm2d(MODEL_DIMENSION),
             nn.ReLU()
         )
@@ -96,7 +96,7 @@ class Generator(nn.Module):
         print(noise.shape)
         output = self.upsample_noise(noise)
         print(output.shape)
-        output = output.view(BATCH_SIZE, MODEL_DIMENSION, 3, 3)
+        output = output.view(BATCH_SIZE, 4 * MODEL_DIMENSION, 3, 3)
         print(output.shape)
         output = self.dconv_upsample(output)
         print(output.shape)
@@ -139,10 +139,16 @@ def main():
     print("load fashion mnist dataset")
     trainloader, testloader = load_fashion_mnist()
     print("load fashion mnist dataset done")
-    model = Generator()
-    gen_output = model(torch.randn(BATCH_SIZE, NOISE_SIZE))
+    generator = Generator()
+    gen_output = generator(torch.randn(BATCH_SIZE, NOISE_SIZE))
     discriminator = Discriminator(MODE)
     print(discriminator(gen_output))
+
+    print("Generator Netowrk")
+    print(generator)
+
+    print("Discrimnator Netowrk")
+    print(discriminator)
     # get some random training images
     dataiter = iter(trainloader)
     # # get random examples from the training set
