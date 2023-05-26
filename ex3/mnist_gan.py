@@ -164,8 +164,19 @@ def train_discriminator(discriminator, generator, optimizer_D, real_images, labe
         discriminator_loss = binary_cross_entropy_loss(discriminator_fake, torch.zeros_like(discriminator_fake))
         discriminator_loss += binary_cross_entropy_loss(discriminator_real, torch.ones_like(discriminator_real))
         discriminator_loss /= 2
+        discriminator.zero_grad()
         discriminator_loss.backward()
     elif mode == "wgan-gp":
+        # Minimizing loss according to Kantorovich-Rubinstein duality to the Wasserstein distance
+        discriminator_loss_real = discriminator_real.mean(0).view(1)
+        discriminator_loss_real.backward()
+
+        discriminator_loss_fake = -discriminator_fake.mean(0).view(1)
+        discriminator_loss_fake.backward()
+        discriminator_loss = discriminator_loss_real + discriminator_loss_fake
+        # TODO: Implement gradient penalty :)
+        raise NotImplementedError
+    else:
         raise NotImplementedError
     optimizer_D.step()
     return discriminator_loss
@@ -193,7 +204,6 @@ def train(trainloader, discriminator, generator, optimizer_G, optimizer_D, mode)
             # Training the Discriminator
             real_images = real_images.to(DEVICE)
             labels = labels.to(DEVICE)
-            discriminator.zero_grad()
             discriminator_loss = train_discriminator(discriminator, generator, optimizer_D, real_images, labels, mode)
             # Training the Generator
             if mode == "dcgan":
