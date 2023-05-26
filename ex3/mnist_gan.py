@@ -152,6 +152,8 @@ def get_optimizer(discriminator, generator, mode):
 def train(trainloader, discriminator, generator, optimizer_G, optimizer_D, mode):
     for epoch in range(EPOCHS):
         for iteration, (real_images, labels) in enumerate(trainloader):
+            if len(real_images) != BATCH_SIZE:
+                continue
             # Training the Discriminator
             real_images = real_images.to(DEVICE)
             labels = labels.to(DEVICE)
@@ -180,7 +182,7 @@ def train(trainloader, discriminator, generator, optimizer_G, optimizer_D, mode)
                     generator_loss = nn.BCELoss()(discriminator(fake_images.detach()), torch.ones_like(discriminator_fake))
                 generator_loss.backward()
                 optimizer_G.step()
-                print("Iteration: {} / {}, GenLoss: {} , DiscLoss: {}".format(iteration, len(trainloader), generator_loss.item(), discriminator_loss.item()))
+                print("Iteration: {} / {}, GenLoss: {} , DiscLoss: {}".format(iteration + 1, len(trainloader), generator_loss.item(), discriminator_loss.item()))
 
 def main():
     print("load fashion mnist dataset")
@@ -195,10 +197,6 @@ def main():
     print(discriminator)
     optimizer_G, optimizer_D = get_optimizer(discriminator, generator, MODE)
     train(trainloader, discriminator, generator, optimizer_G, optimizer_D, MODE)
-
-
-
-
 
     # # get some random training images
     # dataiter = iter(trainloader)
