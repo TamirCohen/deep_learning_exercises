@@ -104,17 +104,11 @@ class Generator(nn.Module):
         )
     
     def forward(self, noise):
-        print(noise.shape)
         output = self.upsample_noise(noise)
-        print(output.shape)
         output = output.view(BATCH_SIZE, 4 * MODEL_DIMENSION, 3, 3)
-        print(output.shape)
         output = self.dconv_upsample(output)
-        print(output.shape)
         output = self.dconv_upsample2(output)
-        print(output.shape)
         output = self.dconv_upsample3(output)
-        print(output.shape)
         return output.view(BATCH_SIZE, OUTPUT_DIM)
 
 def load_fashion_mnist():
