@@ -37,6 +37,8 @@ MODE = 'dcgan'
 IMAGE_DIM = 28
 OUTPUT_DIM = IMAGE_DIM ** 2
 DISCRIMINATOR_ITERATIONS = 5
+DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
 #TODO consider increasing the MODEL_DIMENSION throughout the model the 4 * 4 * 4
 class Discriminator(nn.Module):
     def __init__(self, model_type) -> None:
@@ -188,11 +190,8 @@ def main():
     print("load fashion mnist dataset")
     trainloader, testloader = load_fashion_mnist()
     print("load fashion mnist dataset done")
-    generator = Generator()
-    # gen_output = generator(torch.randn(BATCH_SIZE, NOISE_SIZE))
-    discriminator = Discriminator(MODE)
-    # print(discriminator(gen_output))
-
+    generator = Generator().to(DEVICE)
+    discriminator = Discriminator(MODE).to(DEVICE)
     print("Generator Netowrk")
     print(generator)
 
