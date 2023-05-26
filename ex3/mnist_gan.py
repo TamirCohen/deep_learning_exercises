@@ -5,6 +5,10 @@
 #https://github.com/Zeleni9/pytorch-wgan/blob/master/models/wgan_gradient_penalty.py
 #https://github.com/igul222/improved_wgan_training/blob/master/gan_cifar.py
 
+# Reference:
+# pytorch implementation https://github.com/eriklindernoren/PyTorch-GAN/blob/master/implementations/wgan_gp/wgan_gp.py
+# The original CIFAR model
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -25,27 +29,32 @@ NOISE_SIZE = 128
 LEAKY_SLOPE = 0.2
 STRIDE = 2
 KERNEL_SIZE = 4
-
+DCGAN_BETA1 = 0.5
+DCGAN_BETA2 = 0.999
+DCGAN_LEARNING_RATE = 0.0002
 #consts
-MODE = 'wgan-gp'
+MODE = 'dcgan'
 IMAGE_DIM = 28
 OUTPUT_DIM = IMAGE_DIM ** 2
-
+DISCRIMINATOR_ITERATIONS = 5
 #TODO consider increasing the MODEL_DIMENSION throughout the model the 4 * 4 * 4
 class Discriminator(nn.Module):
     def __init__(self, model_type) -> None:
         super().__init__()
-        assert model_type in ['wgan-gp']
-        self.module = nn.Sequential(
-            nn.Conv2d(1, MODEL_DIMENSION, kernel_size=KERNEL_SIZE, stride=STRIDE),
+        layers = [nn.Conv2d(1, MODEL_DIMENSION, kernel_size=KERNEL_SIZE, stride=STRIDE),
             nn.LeakyReLU(LEAKY_SLOPE),
-            nn.Conv2d(MODEL_DIMENSION, 2 * MODEL_DIMENSION, kernel_size=KERNEL_SIZE, stride=STRIDE),
-            nn.LeakyReLU(LEAKY_SLOPE),
-            nn.Conv2d(2 * MODEL_DIMENSION, 4 * MODEL_DIMENSION, kernel_size=KERNEL_SIZE, stride=STRIDE),
-            nn.LeakyReLU(LEAKY_SLOPE),
-            nn.Flatten(),
-            nn.Linear(4 * MODEL_DIMENSION, 1)
-        )
+            nn.Conv2d(MODEL_DIMENSION, 2 * MODEL_DIMENSION, kernel_size=KERNEL_SIZE, stride=STRIDE)]
+        if model_type != 'wgan-gp':
+            layers.append(nn.BatchNorm2d(2 * MODEL_DIMENSION))
+        layers += [nn.LeakyReLU(LEAKY_SLOPE),
+            nn.Conv2d(2 * MODEL_DIMENSION, 4 * MODEL_DIMENSION, kernel_size=KERNEL_SIZE, stride=STRIDE)]
+        if model_type != 'wgan-gp':
+            layers.append(nn.BatchNorm2d(4 * MODEL_DIMENSION))
+        layers += [nn.LeakyReLU(LEAKY_SLOPE), nn.Flatten(), nn.Linear(4 * MODEL_DIMENSION, 1)]
+        # TODO should I add sigmoid here?
+        layers.append(nn.Sigmoid())
+        
+        self.module = nn.Sequential(*layers)
         self.model_type = model_type
     
     def forward(self, x):
@@ -134,29 +143,75 @@ def img_show(img):
     plt.imshow(np.transpose(npimg, (1,2,0)))
     plt.show()
 
+def get_optimizer(discriminator, generator, mode):
+    if mode == "dcgan":
+        optimizer_G = torch.optim.Adam(generator.parameters(), lr=DCGAN_LEARNING_RATE, betas=(DCGAN_BETA1, DCGAN_BETA2))
+        optimizer_D = torch.optim.Adam(discriminator.parameters(), lr=DCGAN_LEARNING_RATE, betas=(DCGAN_BETA1, DCGAN_BETA2))
+    elif mode == "wgan-gp":
+        raise NotImplementedError
+    else:
+        raise NotImplementedError
+    return optimizer_G, optimizer_D
+
+def train(trainloader, discriminator, generator, optimizer_G, optimizer_D, mode):
+    for iteration, (real_images, labels) in enumerate(trainloader):
+        # Training the Discriminator
+        generator.zero_grad()
+        discriminator.zero_grad()
+        noise = torch.randn(BATCH_SIZE, NOISE_SIZE)
+        fake_images = generator(noise)
+        
+        discriminator_fake = discriminator(fake_images)
+        discriminator_real = discriminator(real_images)
+        if mode == "dcgan":
+            discriminator_loss = nn.BCELoss()(discriminator_fake, torch.zeros_like(discriminator_fake))
+            discriminator_loss += nn.BCELoss()(discriminator_real, torch.ones_like(discriminator_real))
+            discriminator_loss /= 2
+        discriminator_loss.backward()
+        optimizer_D.step()
+
+        # Training the Generator
+        if mode == "dcgan":
+            discriminator_iterations = 1
+        else:
+            discriminator_iterations = DISCRIMINATOR_ITERATIONS
+
+        if iteration % discriminator_iterations == 0:
+            if mode == "dcgan":
+                generator_loss = nn.BCELoss()(discriminator_fake, torch.ones_like(discriminator_fake))
+            generator_loss.backward()
+            optimizer_G.step()
+            print("Iteration: {} / {}, GenLoss: {} ".format(iteration, len(trainloader), loss.item()))
 
 def main():
     print("load fashion mnist dataset")
     trainloader, testloader = load_fashion_mnist()
     print("load fashion mnist dataset done")
     generator = Generator()
-    gen_output = generator(torch.randn(BATCH_SIZE, NOISE_SIZE))
+    # gen_output = generator(torch.randn(BATCH_SIZE, NOISE_SIZE))
     discriminator = Discriminator(MODE)
-    print(discriminator(gen_output))
+    # print(discriminator(gen_output))
 
     print("Generator Netowrk")
     print(generator)
 
     print("Discrimnator Netowrk")
     print(discriminator)
-    # get some random training images
-    dataiter = iter(trainloader)
-    # # get random examples from the training set
-    images, labels = next(dataiter)
-    # # show images
-    # img_show(torchvision.utils.make_grid(images))
-    # # print labels
-    # print(' '.join('%5s' % labels[j] for j in range(64)))
+    optimizer_G, optimizer_D = get_optimizer(discriminator, generator, MODE)
+    train(trainloader, discriminator, generator, optimizer_G, optimizer_D, MODE)
+
+
+
+
+
+    # # get some random training images
+    # dataiter = iter(trainloader)
+    # # # get random examples from the training set
+    # images, labels = next(dataiter)
+    # # # show images
+    # # img_show(torchvision.utils.make_grid(images))
+    # # # print labels
+    # # print(' '.join('%5s' % labels[j] for j in range(64)))
 
 
 if __name__ == "__main__":
