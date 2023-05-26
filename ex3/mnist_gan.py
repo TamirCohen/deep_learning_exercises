@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 # I invented these
 NORMALIZE_MEAN = 0.5
 NORMALIZE_STD = 0.5
-
+EPOCHS = 10
 # From PAPER
 BATCH_SIZE = 64
 # consider changing this to 64
@@ -154,34 +154,35 @@ def get_optimizer(discriminator, generator, mode):
     return optimizer_G, optimizer_D
 
 def train(trainloader, discriminator, generator, optimizer_G, optimizer_D, mode):
-    for iteration, (real_images, labels) in enumerate(trainloader):
-        # Training the Discriminator
-        generator.zero_grad()
-        discriminator.zero_grad()
-        noise = torch.randn(BATCH_SIZE, NOISE_SIZE)
-        fake_images = generator(noise)
-        
-        discriminator_fake = discriminator(fake_images)
-        discriminator_real = discriminator(real_images)
-        if mode == "dcgan":
-            discriminator_loss = nn.BCELoss()(discriminator_fake, torch.zeros_like(discriminator_fake))
-            discriminator_loss += nn.BCELoss()(discriminator_real, torch.ones_like(discriminator_real))
-            discriminator_loss /= 2
-        discriminator_loss.backward()
-        optimizer_D.step()
-
-        # Training the Generator
-        if mode == "dcgan":
-            discriminator_iterations = 1
-        else:
-            discriminator_iterations = DISCRIMINATOR_ITERATIONS
-
-        if iteration % discriminator_iterations == 0:
+    for epoch in range(EPOCHS):
+        for iteration, (real_images, labels) in enumerate(trainloader):
+            # Training the Discriminator
+            generator.zero_grad()
+            discriminator.zero_grad()
+            noise = torch.randn(BATCH_SIZE, NOISE_SIZE)
+            fake_images = generator(noise)
+            
+            discriminator_fake = discriminator(fake_images)
+            discriminator_real = discriminator(real_images)
             if mode == "dcgan":
-                generator_loss = nn.BCELoss()(discriminator_fake, torch.ones_like(discriminator_fake))
-            generator_loss.backward()
-            optimizer_G.step()
-            print("Iteration: {} / {}, GenLoss: {} ".format(iteration, len(trainloader), loss.item()))
+                discriminator_loss = nn.BCELoss()(discriminator_fake, torch.zeros_like(discriminator_fake))
+                discriminator_loss += nn.BCELoss()(discriminator_real, torch.ones_like(discriminator_real))
+                discriminator_loss /= 2
+            discriminator_loss.backward()
+            optimizer_D.step()
+
+            # Training the Generator
+            if mode == "dcgan":
+                discriminator_iterations = 1
+            else:
+                discriminator_iterations = DISCRIMINATOR_ITERATIONS
+
+            if iteration % discriminator_iterations == 0:
+                if mode == "dcgan":
+                    generator_loss = nn.BCELoss()(discriminator(fake_images.detach()), torch.ones_like(discriminator_fake))
+                generator_loss.backward()
+                optimizer_G.step()
+                print("Iteration: {} / {}, GenLoss: {} , DiscLoss: {}".format(iteration, len(trainloader), generator_loss.item(), discriminator_loss.item()))
 
 def main():
     print("load fashion mnist dataset")
