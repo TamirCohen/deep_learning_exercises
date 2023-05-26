@@ -53,8 +53,9 @@ class Discriminator(nn.Module):
         if model_type != 'wgan-gp':
             layers.append(nn.BatchNorm2d(4 * MODEL_DIMENSION))
         layers += [nn.LeakyReLU(LEAKY_SLOPE), nn.Flatten(), nn.Linear(4 * MODEL_DIMENSION, 1)]
-        # TODO should I add sigmoid here?
-        layers.append(nn.Sigmoid())
+        # Adding sigmoid here because I want to use BCELoss in DC-GAN
+        if model_type == 'dcgan':
+            layers.append(nn.Sigmoid())
         
         self.module = nn.Sequential(*layers)
         self.model_type = model_type
@@ -113,20 +114,24 @@ class Generator(nn.Module):
 
 def load_fashion_mnist():
     # load fashion mnist dataset
+    # transform = transforms.Compose(
+    #     [transforms.ToTensor(),
+    #      transforms.Normalize((NORMALIZE_MEAN,), (NORMALIZE_STD,))])
     transform = transforms.Compose(
         [transforms.ToTensor(),
          transforms.Normalize((NORMALIZE_MEAN,), (NORMALIZE_STD,))])
+    
     trainset = torchvision.datasets.FashionMNIST(root='./data',
                                                 train=True,
                                                 download=True,
-                                                transform=transform)
+                                                transform=transforms.ToTensor())
     trainloader = torch.utils.data.DataLoader(trainset,
                                                 batch_size=BATCH_SIZE,
                                                 shuffle=True)
     testset = torchvision.datasets.FashionMNIST(root='./data',
                                                 train=False,
                                                 download=True,
-                                                transform=transform)
+                                                transform=transforms.ToTensor())
     testloader = torch.utils.data.DataLoader(testset,
                                                 batch_size=BATCH_SIZE,
                                                 shuffle=False)
@@ -149,8 +154,38 @@ def get_optimizer(discriminator, generator, mode):
         raise NotImplementedError
     return optimizer_G, optimizer_D
 
-def train(trainloader, discriminator, generator, optimizer_G, optimizer_D, mode):
+def train_discriminator(discriminator, generator, optimizer_D, real_images, labels, mode):
     binary_cross_entropy_loss =  nn.BCELoss()
+    noise = torch.randn(BATCH_SIZE, NOISE_SIZE).to(DEVICE)
+    fake_images = generator(noise)
+    discriminator_fake = discriminator(fake_images)
+    discriminator_real = discriminator(real_images)
+    if mode == "dcgan":
+        discriminator_loss = binary_cross_entropy_loss(discriminator_fake, torch.zeros_like(discriminator_fake))
+        discriminator_loss += binary_cross_entropy_loss(discriminator_real, torch.ones_like(discriminator_real))
+        discriminator_loss /= 2
+        discriminator_loss.backward()
+    elif mode == "wgan-gp":
+        raise NotImplementedError
+    optimizer_D.step()
+    return discriminator_loss
+
+def train_generator(discriminator, generator, optimizer_G, mode):
+    binary_cross_entropy_loss =  nn.BCELoss()
+    noise = torch.randn(BATCH_SIZE, NOISE_SIZE).to(DEVICE)
+    fake_images = generator(noise)
+    discriminator_fake = discriminator(fake_images)
+    if mode == "dcgan":
+        generator_loss = binary_cross_entropy_loss(discriminator_fake, torch.ones_like(discriminator_fake))
+    else:
+        raise NotImplementedError
+    generator.zero_grad()
+    discriminator.zero_grad()
+    generator_loss.backward()
+    optimizer_G.step()
+    return generator_loss
+
+def train(trainloader, discriminator, generator, optimizer_G, optimizer_D, mode):
     for epoch in range(EPOCHS):
         for iteration, (real_images, labels) in enumerate(trainloader):
             if len(real_images) != BATCH_SIZE:
@@ -159,18 +194,7 @@ def train(trainloader, discriminator, generator, optimizer_G, optimizer_D, mode)
             real_images = real_images.to(DEVICE)
             labels = labels.to(DEVICE)
             discriminator.zero_grad()
-            noise = torch.randn(BATCH_SIZE, NOISE_SIZE).to(DEVICE)
-            fake_images = generator(noise)
-            
-            discriminator_fake = discriminator(fake_images)
-            discriminator_real = discriminator(real_images)
-            if mode == "dcgan":
-                discriminator_loss = binary_cross_entropy_loss(discriminator_fake, torch.zeros_like(discriminator_fake))
-                discriminator_loss += binary_cross_entropy_loss(discriminator_real, torch.ones_like(discriminator_real))
-                discriminator_loss /= 2
-            discriminator_loss.backward()
-            optimizer_D.step()
-
+            discriminator_loss = train_discriminator(discriminator, generator, optimizer_D, real_images, labels, mode)
             # Training the Generator
             if mode == "dcgan":
                 discriminator_iterations = 1
@@ -178,18 +202,8 @@ def train(trainloader, discriminator, generator, optimizer_G, optimizer_D, mode)
                 discriminator_iterations = DISCRIMINATOR_ITERATIONS
 
             if iteration % discriminator_iterations == 0:
-                noise = torch.randn(BATCH_SIZE, NOISE_SIZE).to(DEVICE)
-                fake_images = generator(noise)
-                discriminator_fake = discriminator(fake_images)
-                if mode == "dcgan":
-                    generator_loss = binary_cross_entropy_loss(discriminator_fake, torch.ones_like(discriminator_fake))
-                else:
-                    raise NotImplementedError
-                generator.zero_grad()
-                discriminator.zero_grad()
-                generator_loss.backward()
-                optimizer_G.step()
-                print("Iteration: {} / {}, GenLoss: {} , DiscLoss: {}".format(iteration + 1, len(trainloader), generator_loss.item(), discriminator_loss.item()))
+               generator_loss = train_generator(discriminator, generator, optimizer_G, mode)
+               print("Iteration: {} / {}, GenLoss: {} , DiscLoss: {}".format(iteration + 1, len(trainloader), generator_loss.item(), discriminator_loss.item()))
 
 def main():
     print("load fashion mnist dataset")
@@ -197,6 +211,8 @@ def main():
     print("load fashion mnist dataset done")
     generator = Generator().to(DEVICE)
     discriminator = Discriminator(MODE).to(DEVICE)
+    # sample = next(iter(trainloader))[0]
+    # import pdb; pdb.set_trace()
     print("Generator Netowrk")
     print(generator)
 
