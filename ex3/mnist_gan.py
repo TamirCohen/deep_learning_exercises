@@ -153,9 +153,11 @@ def train(trainloader, discriminator, generator, optimizer_G, optimizer_D, mode)
     for epoch in range(EPOCHS):
         for iteration, (real_images, labels) in enumerate(trainloader):
             # Training the Discriminator
+            real_images = real_images.to(DEVICE)
+            labels = labels.to(DEVICE)
             generator.zero_grad()
             discriminator.zero_grad()
-            noise = torch.randn(BATCH_SIZE, NOISE_SIZE)
+            noise = torch.randn(BATCH_SIZE, NOISE_SIZE).to(DEVICE)
             fake_images = generator(noise)
             
             discriminator_fake = discriminator(fake_images)
