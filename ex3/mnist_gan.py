@@ -173,10 +173,11 @@ def train_discriminator(discriminator, generator, optimizer_D, real_images, labe
         discriminator_loss.backward()
     elif mode == "wgan-gp" or mode == "wgan":
         # Minimizing loss according to Kantorovich-Rubinstein duality to the Wasserstein distance
-        discriminator_loss_real = -discriminator_real.mean(0).view(1)
+        #TODO validate the signs
+        discriminator_loss_real = discriminator_real.mean(0).view(1)
         discriminator_loss_real.backward()
 
-        discriminator_loss_fake = discriminator_fake.mean(0).view(1)
+        discriminator_loss_fake = -discriminator_fake.mean(0).view(1)
         discriminator_loss_fake.backward()
         discriminator_loss = discriminator_loss_real + discriminator_loss_fake
         if mode == "wgan-gp":
@@ -196,6 +197,9 @@ def train_generator(discriminator, generator, optimizer_G, mode):
     discriminator_fake = discriminator(fake_images)
     if mode == "dcgan":
         generator_loss = binary_cross_entropy_loss(discriminator_fake, torch.ones_like(discriminator_fake))
+    elif mode == "wgan-gp" or mode == "wgan":
+        #TODO validate sign
+        generator_loss = discriminator_fake.mean(0).view(1)
     else:
         raise NotImplementedError
     generator.zero_grad()
