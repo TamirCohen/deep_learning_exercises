@@ -32,8 +32,10 @@ KERNEL_SIZE = 4
 DCGAN_BETA1 = 0.5
 DCGAN_BETA2 = 0.999
 DCGAN_LEARNING_RATE = 0.0002
+WGAN_LEARNING_RATE = 0.00005
+WGAN_WEIGHT_CLIP = 0.01
 #consts
-MODE = 'dcgan'
+MODE = 'wgan'
 IMAGE_DIM = 28
 OUTPUT_DIM = IMAGE_DIM ** 2
 DISCRIMINATOR_ITERATIONS = 5
@@ -150,6 +152,9 @@ def get_optimizer(discriminator, generator, mode):
         optimizer_D = torch.optim.Adam(discriminator.parameters(), lr=DCGAN_LEARNING_RATE, betas=(DCGAN_BETA1, DCGAN_BETA2))
     elif mode == "wgan-gp":
         raise NotImplementedError
+    elif mode == "wgan":
+        optimizer_G = torch.optim.RMSprop(generator.parameters(), lr=WGAN_LEARNING_RATE)
+        optimizer_D = torch.optim.RMSprop(discriminator.parameters(), lr=WGAN_LEARNING_RATE)
     else:
         raise NotImplementedError
     return optimizer_G, optimizer_D
@@ -166,14 +171,19 @@ def train_discriminator(discriminator, generator, optimizer_D, real_images, labe
         discriminator_loss /= 2
         discriminator.zero_grad()
         discriminator_loss.backward()
-    elif mode == "wgan-gp":
+    elif mode == "wgan-gp" or mode == "wgan":
         # Minimizing loss according to Kantorovich-Rubinstein duality to the Wasserstein distance
-        discriminator_loss_real = discriminator_real.mean(0).view(1)
+        discriminator_loss_real = -discriminator_real.mean(0).view(1)
         discriminator_loss_real.backward()
 
-        discriminator_loss_fake = -discriminator_fake.mean(0).view(1)
+        discriminator_loss_fake = discriminator_fake.mean(0).view(1)
         discriminator_loss_fake.backward()
         discriminator_loss = discriminator_loss_real + discriminator_loss_fake
+        if mode == "wgan-gp":
+            raise NotImplementedError
+        else:
+            for p in discriminator.parameters():
+                p.data.clamp_(-WGAN_WEIGHT_CLIP, WGAN_WEIGHT_CLIP)
         # TODO: Implement gradient penalty :)
         raise NotImplementedError
     else:
