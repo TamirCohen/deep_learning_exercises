@@ -184,8 +184,6 @@ def train_discriminator(discriminator, generator, optimizer_D, real_images, labe
         else:
             for p in discriminator.parameters():
                 p.data.clamp_(-WGAN_WEIGHT_CLIP, WGAN_WEIGHT_CLIP)
-        # TODO: Implement gradient penalty :)
-        raise NotImplementedError
     else:
         raise NotImplementedError
     optimizer_D.step()
