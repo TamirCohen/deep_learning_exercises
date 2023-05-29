@@ -16,11 +16,12 @@ import torchvision
 import torchvision.transforms as transforms
 import numpy as np
 import matplotlib.pyplot as plt
+from tensorboard import SummaryWriter
 
 # I invented these
 NORMALIZE_MEAN = 0.5
 NORMALIZE_STD = 0.5
-EPOCHS = 10
+EPOCHS = 20
 # From PAPER
 BATCH_SIZE = 64
 # consider changing this to 64
@@ -229,11 +230,16 @@ def main():
     print("load fashion mnist dataset done")
     generator = Generator().to(DEVICE)
     discriminator = Discriminator(MODE).to(DEVICE)
-    # sample = next(iter(trainloader))[0]
-    # import pdb; pdb.set_trace()
+
+    # get random images from the trainloader and show them on tensorboard
+    dataiter = iter(trainloader)
+    images, labels = next(dataiter)
+    grid = torchvision.utils.make_grid(images)
+    writer = SummaryWriter()
+    writer.add_image('fashion_mnist_images', grid, 0)
+    return 
     print("Generator Netowrk")
     print(generator)
-
     print("Discrimnator Netowrk")
     print(discriminator)
     optimizer_G, optimizer_D = get_optimizer(discriminator, generator, MODE)
