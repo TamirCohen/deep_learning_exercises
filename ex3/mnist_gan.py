@@ -16,8 +16,8 @@ import torchvision
 import torchvision.transforms as transforms
 import numpy as np
 import matplotlib.pyplot as plt
-from tensorboard import SummaryWriter
-
+from torch.utils.tensorboard import SummaryWriter
+from torchvision import datasets, transforms
 # I invented these
 NORMALIZE_MEAN = 0.5
 NORMALIZE_STD = 0.5
