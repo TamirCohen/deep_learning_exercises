@@ -21,7 +21,7 @@ from torchvision import datasets, transforms
 # I invented these
 NORMALIZE_MEAN = 0.5
 NORMALIZE_STD = 0.5
-EPOCHS = 20
+EPOCHS = 10
 # From PAPER
 BATCH_SIZE = 64
 # consider changing this to 64
@@ -140,13 +140,6 @@ def load_fashion_mnist():
                                                 shuffle=False)
     return trainloader, testloader
 
-def img_show(img):
-    print("showing an image")
-    img = img / 2 + 0.5 # unnormalize
-    npimg = img.numpy()
-    plt.imshow(np.transpose(npimg, (1,2,0)))
-    plt.show()
-
 def get_optimizer(discriminator, generator, mode):
     if mode == "dcgan":
         optimizer_G = torch.optim.Adam(generator.parameters(), lr=DCGAN_LEARNING_RATE, betas=(DCGAN_BETA1, DCGAN_BETA2))
@@ -223,11 +216,18 @@ def train(trainloader, discriminator, generator, optimizer_G, optimizer_D, mode)
             if iteration % discriminator_iterations == 0:
                generator_loss = train_generator(discriminator, generator, optimizer_G, mode)
                print("Iteration: {} / {}, GenLoss: {} , DiscLoss: {}".format(iteration + 1, len(trainloader), generator_loss.item(), discriminator_loss.item()))
+    display_fake_images(generator)
 
-def display_images(images):
+def display_images(images, name):
     grid = torchvision.utils.make_grid(images)
     writer = SummaryWriter()
-    writer.add_image('fashion_mnist_real_images', grid, 0)
+    writer.add_image(name, grid, 0)
+
+def display_fake_images(generator, name="fake_images"):
+    noise = torch.randn(BATCH_SIZE, NOISE_SIZE).to(DEVICE)
+    fake_images = generator(noise)
+    display_images(fake_images, name)
+
 
 def main():
     print("load fashion mnist dataset")
@@ -239,7 +239,7 @@ def main():
     # get random images from the trainloader and show them on tensorboard
     dataiter = iter(trainloader)
     images, labels = next(dataiter)
-    display_images(images)
+    display_images(images, "real_images")
 
     print("Generator Netowrk")
     print(generator)
@@ -247,6 +247,7 @@ def main():
     print(discriminator)
     optimizer_G, optimizer_D = get_optimizer(discriminator, generator, MODE)
     train(trainloader, discriminator, generator, optimizer_G, optimizer_D, MODE)
+
 
     # # get some random training images
     # dataiter = iter(trainloader)
