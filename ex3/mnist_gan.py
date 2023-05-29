@@ -24,8 +24,9 @@ NORMALIZE_STD = 0.5
 EPOCHS = 10
 # From PAPER
 BATCH_SIZE = 64
-# consider changing this to 64
-MODEL_DIMENSION = 128 
+
+# TODO -  consider changing this to 64
+MODEL_DIMENSION = 64
 NOISE_SIZE = 128
 LEAKY_SLOPE = 0.2
 STRIDE = 2
@@ -35,6 +36,7 @@ DCGAN_BETA2 = 0.999
 DCGAN_LEARNING_RATE = 0.0002
 WGAN_LEARNING_RATE = 0.00005
 WGAN_WEIGHT_CLIP = 0.01
+
 #consts
 MODE = 'dcgan'
 IMAGE_DIM = 28
@@ -46,16 +48,16 @@ DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 class Discriminator(nn.Module):
     def __init__(self, model_type) -> None:
         super().__init__()
-        layers = [nn.Conv2d(1, MODEL_DIMENSION, kernel_size=KERNEL_SIZE, stride=STRIDE),
-            nn.LeakyReLU(LEAKY_SLOPE),
-            nn.Conv2d(MODEL_DIMENSION, 2 * MODEL_DIMENSION, kernel_size=KERNEL_SIZE, stride=STRIDE)]
+        layers = [nn.Conv2d(1, MODEL_DIMENSION, kernel_size=KERNEL_SIZE, stride=STRIDE, padding=1),
+            nn.LeakyReLU(LEAKY_SLOPE, inplace=True),
+            nn.Conv2d(MODEL_DIMENSION, 2 * MODEL_DIMENSION, kernel_size=KERNEL_SIZE, stride=STRIDE, padding=1)]
         if model_type != 'wgan-gp':
             layers.append(nn.BatchNorm2d(2 * MODEL_DIMENSION))
-        layers += [nn.LeakyReLU(LEAKY_SLOPE),
-            nn.Conv2d(2 * MODEL_DIMENSION, 4 * MODEL_DIMENSION, kernel_size=KERNEL_SIZE, stride=STRIDE)]
+        layers += [nn.LeakyReLU(LEAKY_SLOPE, inplace=True),
+            nn.Conv2d(2 * MODEL_DIMENSION, 4 * MODEL_DIMENSION, kernel_size=KERNEL_SIZE, stride=STRIDE, padding=1)]
         if model_type != 'wgan-gp':
             layers.append(nn.BatchNorm2d(4 * MODEL_DIMENSION))
-        layers += [nn.LeakyReLU(LEAKY_SLOPE), nn.Flatten(), nn.Linear(4 * MODEL_DIMENSION, 1)]
+        layers += [nn.LeakyReLU(LEAKY_SLOPE, inplace=True), nn.Flatten(), nn.Linear(3 * 3 * 4 * MODEL_DIMENSION, 1)]
         # Adding sigmoid here because I want to use BCELoss in DC-GAN
         if model_type == 'dcgan':
             layers.append(nn.Sigmoid())
@@ -215,7 +217,7 @@ def train(trainloader, discriminator, generator, optimizer_G, optimizer_D, mode)
 
             if iteration % discriminator_iterations == 0:
                generator_loss = train_generator(discriminator, generator, optimizer_G, mode)
-               print("Iteration: {} / {}, GenLoss: {} , DiscLoss: {}".format(iteration + 1, len(trainloader), generator_loss.item(), discriminator_loss.item()))
+               print("Epoch {} / {}, Iteration: {} / {}, GenLoss: {} , DiscLoss: {}".format(epoch, EPOCHS, iteration + 1, len(trainloader), generator_loss.item(), discriminator_loss.item()))
     display_fake_images(generator)
 
 def display_images(images, name):
