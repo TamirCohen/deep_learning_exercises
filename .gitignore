@@ -1,0 +1,8 @@
+*.vscode
+*.log
+ex1/*data_set*
+ex2/data*
+ex3/data*
+*runs*
+events.out*
+*Graphs*

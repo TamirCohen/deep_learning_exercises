@@ -36,7 +36,7 @@ DCGAN_LEARNING_RATE = 0.0002
 WGAN_LEARNING_RATE = 0.00005
 WGAN_WEIGHT_CLIP = 0.01
 #consts
-MODE = 'wgan'
+MODE = 'dcgan'
 IMAGE_DIM = 28
 OUTPUT_DIM = IMAGE_DIM ** 2
 DISCRIMINATOR_ITERATIONS = 5
@@ -224,6 +224,11 @@ def train(trainloader, discriminator, generator, optimizer_G, optimizer_D, mode)
                generator_loss = train_generator(discriminator, generator, optimizer_G, mode)
                print("Iteration: {} / {}, GenLoss: {} , DiscLoss: {}".format(iteration + 1, len(trainloader), generator_loss.item(), discriminator_loss.item()))
 
+def display_images(images):
+    grid = torchvision.utils.make_grid(images)
+    writer = SummaryWriter()
+    writer.add_image('fashion_mnist_real_images', grid, 0)
+
 def main():
     print("load fashion mnist dataset")
     trainloader, testloader = load_fashion_mnist()
@@ -234,10 +239,8 @@ def main():
     # get random images from the trainloader and show them on tensorboard
     dataiter = iter(trainloader)
     images, labels = next(dataiter)
-    grid = torchvision.utils.make_grid(images)
-    writer = SummaryWriter()
-    writer.add_image('fashion_mnist_images', grid, 0)
-    return 
+    display_images(images)
+
     print("Generator Netowrk")
     print(generator)
     print("Discrimnator Netowrk")
