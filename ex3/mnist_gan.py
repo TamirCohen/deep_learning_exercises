@@ -207,7 +207,8 @@ def train(trainloader, discriminator, generator, optimizer_G, optimizer_D, mode)
                     writer.add_scalars('loss', {"Genrator Loss": generator_loss.item(), "Discriminator Loss": discriminator_loss.item()}, epoch * len(trainloader) + iteration)
     finally:    
         display_fake_images(generator)
-        generator.save("generator_{}.pt".format(mode))
+        #TODO fix it 
+        torch.save(generator.state_dict(), "generator_{}.pt".format(mode))
 
 def display_images(images, name):
     grid = torchvision.utils.make_grid(images)
@@ -251,7 +252,8 @@ def main():
         train(trainloader, discriminator, generator, optimizer_G, optimizer_D, args.mode)
     elif args.generate:
         generator = Generator().to(DEVICE)
-        generator.load("generator_{}.pt".format(args.mode))
+        generator.load_state_dict("generator_{}.pt".format(args.mode))
+        generator.eval()
         display_fake_images(generator, image_number=10)
 
 if __name__ == "__main__":
