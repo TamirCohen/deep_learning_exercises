@@ -21,7 +21,7 @@ from torchvision import datasets, transforms
 # I invented these
 NORMALIZE_MEAN = 0.5
 NORMALIZE_STD = 0.5
-EPOCHS = 10
+EPOCHS = 50
 # From PAPER
 BATCH_SIZE = 64
 
@@ -43,7 +43,7 @@ IMAGE_DIM = 28
 OUTPUT_DIM = IMAGE_DIM ** 2
 DISCRIMINATOR_ITERATIONS = 5
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
+LOG_INTERVAL = 100
 #TODO consider increasing the MODEL_DIMENSION throughout the model the 4 * 4 * 4
 class Discriminator(nn.Module):
     def __init__(self, model_type) -> None:
@@ -201,6 +201,7 @@ def train_generator(discriminator, generator, optimizer_G, mode):
     return generator_loss
 
 def train(trainloader, discriminator, generator, optimizer_G, optimizer_D, mode):
+    writer = SummaryWriter()
     for epoch in range(EPOCHS):
         for iteration, (real_images, labels) in enumerate(trainloader):
             if len(real_images) != BATCH_SIZE:
@@ -217,7 +218,12 @@ def train(trainloader, discriminator, generator, optimizer_G, optimizer_D, mode)
 
             if iteration % discriminator_iterations == 0:
                generator_loss = train_generator(discriminator, generator, optimizer_G, mode)
-               print("Epoch {} / {}, Iteration: {} / {}, GenLoss: {} , DiscLoss: {}".format(epoch, EPOCHS, iteration + 1, len(trainloader), generator_loss.item(), discriminator_loss.item()))
+            if iteration % LOG_INTERVAL == 0:
+                print("Epoch {} / {}, Iteration: {} / {}, GenLoss: {} , DiscLoss: {}".format(epoch, EPOCHS, iteration + 1, len(trainloader), generator_loss.item(), discriminator_loss.item()))
+                writer.add_scalar('loss', {"Genrator Loss": generator_loss.item(), "Discriminator Loss": discriminator_loss.item()}, epoch * len(trainloader) + iteration)
+
+                
+                
     display_fake_images(generator)
 
 def display_images(images, name):
