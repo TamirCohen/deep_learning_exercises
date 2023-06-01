@@ -21,7 +21,7 @@ from torchvision import datasets, transforms
 # I invented these
 NORMALIZE_MEAN = 0.5
 NORMALIZE_STD = 0.5
-EPOCHS = 50
+EPOCHS = 20
 # From PAPER
 BATCH_SIZE = 64
 
@@ -165,7 +165,6 @@ def train_discriminator(discriminator, generator, optimizer_D, real_images, labe
     if mode == "dcgan":
         discriminator_loss = binary_cross_entropy_loss(discriminator_fake, torch.zeros_like(discriminator_fake))
         discriminator_loss += binary_cross_entropy_loss(discriminator_real, torch.ones_like(discriminator_real))
-        discriminator_loss /= 2
         discriminator_loss.backward()
     elif mode == "wgan-gp" or mode == "wgan":
         # Minimizing loss according to Kantorovich-Rubinstein duality to the Wasserstein distance
@@ -202,29 +201,28 @@ def train_generator(discriminator, generator, optimizer_G, mode):
 
 def train(trainloader, discriminator, generator, optimizer_G, optimizer_D, mode):
     writer = SummaryWriter()
-    for epoch in range(EPOCHS):
-        for iteration, (real_images, labels) in enumerate(trainloader):
-            if len(real_images) != BATCH_SIZE:
-                continue
-            # Training the Discriminator
-            real_images = real_images.to(DEVICE)
-            labels = labels.to(DEVICE)
-            discriminator_loss = train_discriminator(discriminator, generator, optimizer_D, real_images, labels, mode)
-            # Training the Generator
-            if mode == "dcgan":
-                discriminator_iterations = 1
-            else:
-                discriminator_iterations = DISCRIMINATOR_ITERATIONS
+    try:
+        for epoch in range(EPOCHS):
+            for iteration, (real_images, labels) in enumerate(trainloader):
+                if len(real_images) != BATCH_SIZE:
+                    continue
+                # Training the Discriminator
+                real_images = real_images.to(DEVICE)
+                labels = labels.to(DEVICE)
+                discriminator_loss = train_discriminator(discriminator, generator, optimizer_D, real_images, labels, mode)
+                # Training the Generator
+                if mode == "dcgan":
+                    discriminator_iterations = 1
+                else:
+                    discriminator_iterations = DISCRIMINATOR_ITERATIONS
 
-            if iteration % discriminator_iterations == 0:
-               generator_loss = train_generator(discriminator, generator, optimizer_G, mode)
-            if iteration % LOG_INTERVAL == 0:
-                print("Epoch {} / {}, Iteration: {} / {}, GenLoss: {} , DiscLoss: {}".format(epoch, EPOCHS, iteration + 1, len(trainloader), generator_loss.item(), discriminator_loss.item()))
-                writer.add_scalars('loss', {"Genrator Loss": generator_loss.item(), "Discriminator Loss": discriminator_loss.item()}, epoch * len(trainloader) + iteration)
-
-                
-                
-    display_fake_images(generator)
+                if iteration % discriminator_iterations == 0:
+                   generator_loss = train_generator(discriminator, generator, optimizer_G, mode)
+                if iteration % LOG_INTERVAL == 0:
+                    print("Epoch {} / {}, Iteration: {} / {}, GenLoss: {} , DiscLoss: {}".format(epoch, EPOCHS, iteration + 1, len(trainloader), generator_loss.item(), discriminator_loss.item()))
+                    writer.add_scalars('loss', {"Genrator Loss": generator_loss.item(), "Discriminator Loss": discriminator_loss.item()}, epoch * len(trainloader) + iteration)
+    finally:    
+        display_fake_images(generator)
 
 def display_images(images, name):
     grid = torchvision.utils.make_grid(images)
@@ -234,6 +232,7 @@ def display_images(images, name):
 def display_fake_images(generator, name="fake_images"):
     noise = torch.randn(BATCH_SIZE, NOISE_SIZE).to(DEVICE)
     fake_images = generator(noise)
+    fake_images = fake_images.view(BATCH_SIZE, 1, IMAGE_DIM, IMAGE_DIM)
     display_images(fake_images, name)
 
 
