@@ -220,7 +220,7 @@ def train(trainloader, discriminator, generator, optimizer_G, optimizer_D, mode)
                generator_loss = train_generator(discriminator, generator, optimizer_G, mode)
             if iteration % LOG_INTERVAL == 0:
                 print("Epoch {} / {}, Iteration: {} / {}, GenLoss: {} , DiscLoss: {}".format(epoch, EPOCHS, iteration + 1, len(trainloader), generator_loss.item(), discriminator_loss.item()))
-                writer.add_scalar('loss', {"Genrator Loss": generator_loss.item(), "Discriminator Loss": discriminator_loss.item()}, epoch * len(trainloader) + iteration)
+                writer.add_scalars('loss', {"Genrator Loss": generator_loss.item(), "Discriminator Loss": discriminator_loss.item()}, epoch * len(trainloader) + iteration)
 
                 
                 
