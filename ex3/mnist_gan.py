@@ -2,12 +2,7 @@
 # using pytorch
 
 #references:
-#https://github.com/Zeleni9/pytorch-wgan/blob/master/models/wgan_gradient_penalty.py
 #https://github.com/igul222/improved_wgan_training/blob/master/gan_cifar.py
-
-# Reference:
-# pytorch implementation https://github.com/eriklindernoren/PyTorch-GAN/blob/master/implementations/wgan_gp/wgan_gp.py
-# The original CIFAR model
 
 import torch
 import torch.nn as nn
@@ -20,13 +15,10 @@ import argparse
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import datasets, transforms
 # I invented these
-NORMALIZE_MEAN = 0.5
-NORMALIZE_STD = 0.5
 EPOCHS = 50
 # From PAPER
 BATCH_SIZE = 64
-
-# TODO -  consider changing this to 64
+# MODEL_DIMENSION was 128 in the paper but they suggested to use 64 to prevent overfitting
 MODEL_DIMENSION = 64
 NOISE_SIZE = 128
 LEAKY_SLOPE = 0.2
@@ -118,14 +110,6 @@ class Generator(nn.Module):
         return output.view(BATCH_SIZE, OUTPUT_DIM)
 
 def load_fashion_mnist():
-    # load fashion mnist dataset
-    # transform = transforms.Compose(
-    #     [transforms.ToTensor(),
-    #      transforms.Normalize((NORMALIZE_MEAN,), (NORMALIZE_STD,))])
-    transform = transforms.Compose(
-        [transforms.ToTensor(),
-         transforms.Normalize((NORMALIZE_MEAN,), (NORMALIZE_STD,))])
-    
     trainset = torchvision.datasets.FashionMNIST(root='./data',
                                                 train=True,
                                                 download=True,
