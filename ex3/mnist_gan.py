@@ -16,12 +16,13 @@ import torchvision
 import torchvision.transforms as transforms
 import numpy as np
 import matplotlib.pyplot as plt
+import argparse
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import datasets, transforms
 # I invented these
 NORMALIZE_MEAN = 0.5
 NORMALIZE_STD = 0.5
-EPOCHS = 20
+EPOCHS = 50
 # From PAPER
 BATCH_SIZE = 64
 
@@ -38,7 +39,6 @@ WGAN_LEARNING_RATE = 0.00005
 WGAN_WEIGHT_CLIP = 0.01
 
 #consts
-MODE = 'dcgan'
 IMAGE_DIM = 28
 OUTPUT_DIM = IMAGE_DIM ** 2
 DISCRIMINATOR_ITERATIONS = 5
@@ -223,48 +223,52 @@ def train(trainloader, discriminator, generator, optimizer_G, optimizer_D, mode)
                     writer.add_scalars('loss', {"Genrator Loss": generator_loss.item(), "Discriminator Loss": discriminator_loss.item()}, epoch * len(trainloader) + iteration)
     finally:    
         display_fake_images(generator)
+        generator.save("generator_{}.pt".format(mode))
 
 def display_images(images, name):
     grid = torchvision.utils.make_grid(images)
     writer = SummaryWriter()
     writer.add_image(name, grid, 0)
 
-def display_fake_images(generator, name="fake_images"):
-    noise = torch.randn(BATCH_SIZE, NOISE_SIZE).to(DEVICE)
+def display_fake_images(generator, name="fake_images", image_number=BATCH_SIZE):
+    noise = torch.randn(image_number, NOISE_SIZE).to(DEVICE)
     fake_images = generator(noise)
     fake_images = fake_images.view(BATCH_SIZE, 1, IMAGE_DIM, IMAGE_DIM)
     display_images(fake_images, name)
 
+# add argparse to main, should be able to choose between dcgan, wgan, wgan-gp and should train or or generate image from pretrained model
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", type=str, help="dcgan, wgan, wgan-gp")
+    parser.add_argument("--train", action="store_true", help="train the model")
+    parser.add_argument("--generate", action="store_true", help="generate images from pretrained model")
+    args = parser.parse_args()
+    return args
 
 def main():
+    args = parse_args()
     print("load fashion mnist dataset")
     trainloader, testloader = load_fashion_mnist()
     print("load fashion mnist dataset done")
-    generator = Generator().to(DEVICE)
-    discriminator = Discriminator(MODE).to(DEVICE)
+    
+    if args.train:
+        generator = Generator().to(DEVICE)
+        discriminator = Discriminator(args.mode).to(DEVICE)
+        # get random images from the trainloader and show them on tensorboard
+        dataiter = iter(trainloader)
+        images, labels = next(dataiter)
+        display_images(images, "real_images")
 
-    # get random images from the trainloader and show them on tensorboard
-    dataiter = iter(trainloader)
-    images, labels = next(dataiter)
-    display_images(images, "real_images")
-
-    print("Generator Netowrk")
-    print(generator)
-    print("Discrimnator Netowrk")
-    print(discriminator)
-    optimizer_G, optimizer_D = get_optimizer(discriminator, generator, MODE)
-    train(trainloader, discriminator, generator, optimizer_G, optimizer_D, MODE)
-
-
-    # # get some random training images
-    # dataiter = iter(trainloader)
-    # # # get random examples from the training set
-    # images, labels = next(dataiter)
-    # # # show images
-    # # img_show(torchvision.utils.make_grid(images))
-    # # # print labels
-    # # print(' '.join('%5s' % labels[j] for j in range(64)))
-
+        print("Generator Netowrk")
+        print(generator)
+        print("Discrimnator Netowrk")
+        print(discriminator)
+        optimizer_G, optimizer_D = get_optimizer(discriminator, generator, args.mode)
+        train(trainloader, discriminator, generator, optimizer_G, optimizer_D, args.mode)
+    elif args.generate:
+        generator = Generator().to(DEVICE)
+        generator.load("generator_{}.pt".format(args.mode))
+        display_fake_images(generator, image_number=10)
 
 if __name__ == "__main__":
     main()
