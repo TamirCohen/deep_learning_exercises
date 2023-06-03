@@ -254,7 +254,7 @@ def main():
         generator = Generator().to(DEVICE)
         generator.load_state_dict(torch.load("generator_{}.pt".format(args.mode)))
         generator.eval()
-        display_fake_images(generator, image_number=10)
+        display_fake_images(generator, image_number=1, name=f"generated_images_{args.mode}")
 
 if __name__ == "__main__":
     main()
