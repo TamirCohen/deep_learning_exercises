@@ -252,7 +252,7 @@ def main():
         train(trainloader, discriminator, generator, optimizer_G, optimizer_D, args.mode)
     elif args.generate:
         generator = Generator().to(DEVICE)
-        generator.load_state_dict("generator_{}.pt".format(args.mode))
+        generator.load_state_dict(torch.load("generator_{}.pt".format(args.mode)))
         generator.eval()
         display_fake_images(generator, image_number=10)
 
