@@ -16,6 +16,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torchvision import datasets, transforms
 # I invented these
 EPOCHS = 50
+WGAN_EPOCHS = 30
 # From PAPER
 BATCH_SIZE = 64
 # MODEL_DIMENSION was 128 in the paper but they suggested to use 64 to prevent overfitting
@@ -183,10 +184,10 @@ def train_generator(discriminator, generator, optimizer_G, mode):
     optimizer_G.step()
     return generator_loss
 
-def train(trainloader, discriminator, generator, optimizer_G, optimizer_D, mode):
+def train(trainloader, discriminator, generator, optimizer_G, optimizer_D, mode, epochs):
     writer = SummaryWriter()
     try:
-        for epoch in range(EPOCHS):
+        for epoch in range(epochs):
             for iteration, (real_images, labels) in enumerate(trainloader):
                 if len(real_images) != BATCH_SIZE:
                     continue
@@ -249,7 +250,11 @@ def main():
         print("Discrimnator Netowrk")
         print(discriminator)
         optimizer_G, optimizer_D = get_optimizer(discriminator, generator, args.mode)
-        train(trainloader, discriminator, generator, optimizer_G, optimizer_D, args.mode)
+        if args.mode == "dcgan":
+            epochs = EPOCHS
+        else:
+            epochs = WGAN_EPOCHS
+        train(trainloader, discriminator, generator, optimizer_G, optimizer_D, args.mode, epochs)
     elif args.generate:
         generator = Generator().to(DEVICE)
         generator.load_state_dict(torch.load("generator_{}.pt".format(args.mode)))
