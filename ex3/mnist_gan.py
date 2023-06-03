@@ -103,11 +103,11 @@ class Generator(nn.Module):
     
     def forward(self, noise):
         output = self.upsample_noise(noise)
-        output = output.view(BATCH_SIZE, 4 * MODEL_DIMENSION, 3, 3)
+        output = output.view(-1, 4 * MODEL_DIMENSION, 3, 3)
         output = self.dconv_upsample(output)
         output = self.dconv_upsample2(output)
         output = self.dconv_upsample3(output)
-        return output.view(BATCH_SIZE, OUTPUT_DIM)
+        return output.view(-1, OUTPUT_DIM)
 
 def load_fashion_mnist():
     trainset = torchvision.datasets.FashionMNIST(root='./data',
@@ -218,7 +218,7 @@ def display_images(images, name):
 def display_fake_images(generator, name="fake_images", image_number=BATCH_SIZE):
     noise = torch.randn(image_number, NOISE_SIZE).to(DEVICE)
     fake_images = generator(noise)
-    fake_images = fake_images.view(BATCH_SIZE, 1, IMAGE_DIM, IMAGE_DIM)
+    fake_images = fake_images.view(image_number, 1, IMAGE_DIM, IMAGE_DIM)
     display_images(fake_images, name)
 
 # add argparse to main, should be able to choose between dcgan, wgan, wgan-gp and should train or or generate image from pretrained model
