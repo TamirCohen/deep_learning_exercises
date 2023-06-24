@@ -26,13 +26,15 @@ Size = 28 # size of image (28x28)
 Input_size = Size*Size # size of image
 input_dim = (Size,Size) # dimension of image
 N_minibatch = 100 # size of minibatch
-N_labels = 20 # number of classes
+N_labels = 10 # number of classes
 Learning_rate = 0.0001 # learning rate
 Epochs = 30 # number of epochs  
 N_hidden = 600 # number of hidden units
 N_z = 50 # number of latent variables
-Load_model_from_file = False # load model from file
-Save_model_to_file = True # load model from file
+Load_trained_model = True # load trained model
+Load_tested_data = False # load test data
+Save_all_to_files = False # load model from file
+plot_first_10_images = False # plot the first 10 images
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print("Using device: {}".format(device))
@@ -61,8 +63,8 @@ def load_data_fashion():
     )
 
     # train dataloaders
-    train_loader = DataLoader(dataset=train_set, batch_size=N_minibatch, shuffle=True)
-    test_loader = DataLoader(dataset=test_set, batch_size=N_minibatch, shuffle=True)
+    train_loader = DataLoader(dataset=train_set, batch_size=N_minibatch, shuffle=False)
+    test_loader = DataLoader(dataset=test_set, batch_size=N_minibatch, shuffle=False)
 
     print(train_set.data[0].shape)
     print(len(train_set))
@@ -164,7 +166,7 @@ def test_model(model, data):
             labels_vec = torch.cat((labels_vec, labels), 0)
             mu_mat = torch.cat((mu_mat, mu), 0)    
         # plot 10 first images + their reconstructions
-    if 1:
+    if plot_first_10_images:
         plt.figure(1)
         for i in range(10):           
             plt.subplot(2, 10, i+1)
@@ -209,7 +211,7 @@ def svm_after_vae(mu_train_labeled, labels_train, mu_test, labels_test, option):
     # fit the model with the labeled data
     clf.fit(mu_train_labeled, labels_train)
 
-    if Save_model_to_file:
+    if Save_all_to_files:
         # save the model to a file
         torch.save(clf, 'svm_model_{}.pth'.format(option))
 
@@ -232,7 +234,7 @@ def main(label_options):
     train_loader, test_loader = load_data_fashion()  
 
     # load the trained model from a file
-    if Load_model_from_file:
+    if Load_trained_model:
         # load the trained model from a file
         print('Loading trained model from file...')
         trained_model = LinearVAE()
@@ -248,7 +250,7 @@ def main(label_options):
         loss, trained_model = train_model_vae(model, optimizer, train_loader)
         results['train_loss'] = loss
 
-    if Save_model_to_file:
+    if Save_all_to_files:
         # save the trained model to a file
         print('Saving trained model to file...')
         torch.save(trained_model.state_dict(), 'trained_model.pth')
@@ -256,7 +258,7 @@ def main(label_options):
     
 
     print('Testing model...')
-    if Load_model_from_file:
+    if Load_tested_data:
         
         print('Loading results from file...')
         final_reconstructions_train = torch.load('final_reconstructions_train.pth')
@@ -273,7 +275,7 @@ def main(label_options):
         final_train_labels = train_loader.dataset.targets
         final_test_labels = test_loader.dataset.targets
     
-    if Save_model_to_file:
+    if Save_all_to_files:
         # save the results to a file
         print('Saving results to file...')
         torch.save(final_reconstructions_train, 'final_reconstructions_train.pth')
